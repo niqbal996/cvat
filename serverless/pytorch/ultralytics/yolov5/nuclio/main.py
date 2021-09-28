@@ -8,6 +8,8 @@ from PIL import Image
 import io
 import numpy as np
 from model_handler import ModelHandler
+import debugpy
+debugpy.listen(5678)
 
 def init_context(context):
     context.logger.info("Init context...  0%")
