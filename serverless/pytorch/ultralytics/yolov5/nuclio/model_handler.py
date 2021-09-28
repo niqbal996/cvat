@@ -2,47 +2,33 @@
 #
 # SPDX-License-Identifier: MIT
 
-import numpy as np
 import os
-import cv2
 import torch
 import torch.nn as nn
 # from dataloaders import helpers
+from models.common import Conv
+from models.yolo import Model
 
-def convert_mask_to_polygon(mask):
-    mask = np.array(mask, dtype=np.uint8)
-    cv2.normalize(mask, mask, 0, 255, cv2.NORM_MINMAX)
-    contours = None
-    if int(cv2.__version__.split('.')[0]) > 3:
-        contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)[0]
-    else:
-        contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)[1]
-
-    contours = max(contours, key=lambda arr: arr.size)
-    if contours.shape.count(1):
-        contours = np.squeeze(contours)
-    if contours.size < 3 * 2:
-        raise Exception('Less then three point have been detected. Can not build a polygon.')
-
-    polygon = []
-    for point in contours:
-        polygon.append([int(point[0]), int(point[1])])
-
-    return polygon
-
-class Conv(nn.Module):
-    # Standard convolution
-    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):  # ch_in, ch_out, kernel, stride, padding, groups
-        super().__init__()
-        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p), groups=g, bias=False)
-        self.bn = nn.BatchNorm2d(c2)
-        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
-
-    def forward(self, x):
-        return self.act(self.bn(self.conv(x)))
-
-    def forward_fuse(self, x):
-        return self.act(self.conv(x))
+# def convert_mask_to_polygon(mask):
+#     mask = np.array(mask, dtype=np.uint8)
+#     cv2.normalize(mask, mask, 0, 255, cv2.NORM_MINMAX)
+#     contours = None
+#     if int(cv2.__version__.split('.')[0]) > 3:
+#         contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)[0]
+#     else:
+#         contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)[1]
+#
+#     contours = max(contours, key=lambda arr: arr.size)
+#     if contours.shape.count(1):
+#         contours = np.squeeze(contours)
+#     if contours.size < 3 * 2:
+#         raise Exception('Less then three point have been detected. Can not build a polygon.')
+#
+#     polygon = []
+#     for point in contours:
+#         polygon.append([int(point[0]), int(point[1])])
+#
+#     return polygon
 
 class Ensemble(nn.ModuleList):
     # Ensemble of models
@@ -61,7 +47,7 @@ class Ensemble(nn.ModuleList):
 
 
 def attempt_load(weights, map_location=None, inplace=True):
-    # from yolo import Detect, Model
+    from serverless.pytorch.ultralytics.yolov5.nuclio.models.yolo import Detect, Model
 
     # Loads an ensemble of models weights=[a,b,c] or a single model weights=[a] or weights=a
     model = Ensemble()
@@ -99,8 +85,11 @@ class ModelHandler:
         # self.net.load_state_dict(pretrain_dict)
         # self.net.to(self.device)
         # self.net.eval()
+        # w = weights[0] if isinstance(weights, list) else weights
+        self.net = Model(cfg='./yolov5m.yaml')
 
-        self.net = attempt_load(model_path, map_location=self.device)
+        pretrained_dict = torch.load(model_path, map_location=self.device)
+        self.net.load_state_dict(pretrained_dict, strict=False)
         self.net.eval()
 
     def handle(self, image, threshold):
@@ -122,5 +111,5 @@ class ModelHandler:
             #
             # polygon = translate_points_to_image(polygon)
 
-            return polygon
+            return 1
 

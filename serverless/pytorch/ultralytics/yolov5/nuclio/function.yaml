@@ -21,7 +21,7 @@ spec:
 
   build:
     image: cvat/public-yolo-v5-pytorch
-    baseImage: continuumio/miniconda3
+    baseImage: niqbal996/cvat:yolov5-pytorch-latest
 
     directives:
       preCopy:
@@ -34,15 +34,15 @@ spec:
         - kind: SHELL
           value: '["conda", "run", "-n", "yolo", "/bin/bash", "-c"]'
         - kind: RUN
-          value: conda install -y -c anaconda curl
+          value: conda install -y -c anaconda curl requests pandas pyyaml tqdm matplotlib seaborn scipy
         - kind: RUN
           value: conda install -y pytorch=1.8.1 torchvision=0.9.1 -c pytorch
         - kind: RUN
-          value: conda install -y -c conda-forge pycocotools scipy
-        - kind: RUN
           value: apt-get update && apt-get install -y python3-opencv && pip install opencv-python
         - kind: RUN
-          value: pip3 install debugpy
+          value: conda install -c anaconda pillow numpy
+#        - kind: RUN
+#          value: pip install pyyaml
 #        - kind: RUN
 #          value: ln -s /usr/bin/pip3 /usr/bin/pip
 #        - kind: ENV
@@ -52,9 +52,11 @@ spec:
 #        - kind: RUN
 #          value: curl -c ./cookie -s -L "https://drive.google.com/uc?export=download&id=${fileid}" > /dev/null
         - kind: WORKDIR
-          value: /opt/nuclio/yolov5
+          value: /opt/nuclio
         - kind: RUN
           value: wget https://raw.githubusercontent.com/niqbal996/cvat/develop/yolov5.pt
+        - kind: WORKDIR
+          value: /opt/nuclio/yolov5
         - kind: ENTRYPOINT
           value: '["conda", "run", "-n", "yolo"]'
   triggers:
