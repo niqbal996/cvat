@@ -1,10 +1,4 @@
 import time
-
-import cv2
-import math
-import numpy as np
-import pandas as pd
-import pkg_resources as pkg
 import torch
 import torchvision
 
