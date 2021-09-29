@@ -8,6 +8,7 @@ import torch.nn as nn
 # from dataloaders import helpers
 from models.common import Conv
 from models.yolo import Model
+from utils.postprocess import scale_boxes, non_max_suppression
 
 # def convert_mask_to_polygon(mask):
 #     mask = np.array(mask, dtype=np.uint8)
@@ -92,24 +93,20 @@ class ModelHandler:
         self.net.load_state_dict(pretrained_dict, strict=False)
         self.net.eval()
 
-    def handle(self, image, threshold):
+    def handle(self, image):
         with torch.no_grad():
             # extract a crop with padding from the image
             # pred = np.transpose(output_mask.data.numpy()[0, :, :, :], (1, 2, 0))
             # pred = pred > threshold
             # pred = np.squeeze(pred)
-            #
-            # # Convert a mask to a polygon
-            # polygon = convert_mask_to_polygon(pred)
-            # def translate_points_to_image(points):
-            #     points = [
-            #         (p[0] / crop_scale[0] + crop_bbox[0], # x
-            #          p[1] / crop_scale[1] + crop_bbox[1]) # y
-            #         for p in points]
-            #
-            #     return points
-            #
-            # polygon = translate_points_to_image(polygon)
+            cv_image = np.array(image)
+            cv_image = open_cv_image[:, :, ::-1]
+            cv_image = np.transpose(cv_image, (2, 0, 1)).astype(np.float32)
+            cv_image = np.expand_dims(cv_image, axis=0)
+            cv_image /= 255.0
+            pred = self.net(torch.Tensor(cv_image).to(self.device))[0]
 
+            pred = non_max_suppression(pred)
+            pred = scale_boxes(pred, image)
             return 1
 
