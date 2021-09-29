@@ -14,7 +14,7 @@ spec:
   description: YOLO v5 Crop detector via PyTorch
   runtime: 'python:3.6'
   handler: main:handler
-  eventTimeout: 30s
+  eventTimeout: 330000s
   env:
     - name: PYTHONPATH
       value: /opt/nuclio/yolov5
@@ -41,8 +41,8 @@ spec:
           value: apt-get update && apt-get install -y python3-opencv && pip install opencv-python
         - kind: RUN
           value: conda install -c anaconda pillow numpy
-#        - kind: RUN
-#          value: pip install pyyaml
+        - kind: RUN
+          value: pip install debugpy
 #        - kind: RUN
 #          value: ln -s /usr/bin/pip3 /usr/bin/pip
 #        - kind: ENV
@@ -63,7 +63,7 @@ spec:
     myHttpTrigger:
       maxWorkers: 1
       kind: 'http'
-      workerAvailabilityTimeoutMilliseconds: 10000
+      workerAvailabilityTimeoutMilliseconds: 100000000
       attributes:
         maxRequestBodySize: 33554432 # 32MB
 

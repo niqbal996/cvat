@@ -11,7 +11,7 @@ metadata:
           { "id": 2, "name": "weed" }
         ]
 spec:
-  description: YOLO v3 via PyTorch
+  description: YOLO v3 via PyTorch with GPU
   runtime: 'python:3.6'
   handler: main:handler
   eventTimeout: 30s
@@ -20,8 +20,8 @@ spec:
       value: /opt/nuclio/yolov5
 
   build:
-    image: cvat/public-yolo-v5-pytorch
-    baseImage: continuumio/miniconda3
+    image: cvat/public-yolo-v5-pytorch-gpu
+    baseImage: niqbal996/cvat:yolov5-pytorch-latest
 
     directives:
       preCopy:
@@ -34,15 +34,13 @@ spec:
         - kind: SHELL
           value: '["conda", "run", "-n", "yolo", "/bin/bash", "-c"]'
         - kind: RUN
-          value: conda install -y -c anaconda curl
+          value: conda install -y -c anaconda curl numpy requests pandas pyyaml tqdm matplotlib seaborn scipy pillow
         - kind: RUN
           value: conda install -y pytorch=1.8.1 torchvision=0.9.1 -c pytorch
         - kind: RUN
-          value: conda install -y -c conda-forge pycocotools scipy
-        - kind: RUN
           value: apt-get update && apt-get install -y python3-opencv && pip install opencv-python
         - kind: RUN
-          value: pip3 install debugpy
+          value: pip install debugpy
 #        - kind: RUN
 #          value: ln -s /usr/bin/pip3 /usr/bin/pip
 #        - kind: ENV
@@ -52,9 +50,11 @@ spec:
 #        - kind: RUN
 #          value: curl -c ./cookie -s -L "https://drive.google.com/uc?export=download&id=${fileid}" > /dev/null
         - kind: WORKDIR
-          value: /opt/nuclio/yolov5
+          value: /opt/nuclio
         - kind: RUN
           value: wget https://raw.githubusercontent.com/niqbal996/cvat/develop/yolov5.pt
+        - kind: RUN
+          value: /opt/nuclio/yolov5
         - kind: ENTRYPOINT
           value: '["conda", "run", "-n", "yolo"]'
   triggers:
