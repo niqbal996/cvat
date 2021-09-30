@@ -77,30 +77,36 @@ class ModelHandler:
             pred = self.net(torch.Tensor(cv_image).to(self.device))[0]
             pred = non_max_suppression(pred, conf_thres=0.0, iou_thres=0.0)
             polygons = []
-            for det in enumerate(pred):  # detections per image
-                if len(det):
-                    # Rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(img_size, det[:, :4], cv_image.shape[2:]).round()
-                    # Write results
-                    for *xyxy, conf, cls in reversed(det):
-                        polygons.append({ "confidence": str(conf),
-                                        "label": cls,
-                                        "points": [xtl, ytl, xbr, ybr],
+            # for det in enumerate(pred):  # detections per image
+            #     if len(det):
+            #         # Rescale boxes from img_size to im0 size
+            #         det[:, :4] = scale_coords(img_size, det[:, :4], cv_image.shape[2:]).round()
+            #         # Write results
+            #         for *xyxy, conf, cls in reversed(det):
+            #             polygons.append({ "confidence": str(conf),
+            #                             "label": cls,
+            #                             "points": [xtl, ytl, xbr, ybr],
+            #                             "type": "rectangle",
+            #                            })
+
+            #             print('hold')
+            #             # if save_txt:  # Write to file
+            #             #     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+            #             #     line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
+            #             #     with open(txt_path + '.txt', 'a') as f:
+            #             #         f.write(('%g ' * len(line)).rstrip() % line + '\n')
+
+            #             # if save_img or save_crop or view_img:  # Add bbox to image
+            #             #     c = int(cls)  # integer class
+            #             #     label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
+            #             #     plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
+            #             #     if save_crop:
+            #             #         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+            polygons.append({ "confidence": str(1),
+                                        "label": str("person"),
+                                        "points": [10, 200, 100, 456],
                                         "type": "rectangle",
                                        })
 
-                        print('hold')
-                        # if save_txt:  # Write to file
-                        #     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        #     line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                        #     with open(txt_path + '.txt', 'a') as f:
-                        #         f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-                        # if save_img or save_crop or view_img:  # Add bbox to image
-                        #     c = int(cls)  # integer class
-                        #     label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                        #     plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
-                        #     if save_crop:
-                        #         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
             return polygons
 
