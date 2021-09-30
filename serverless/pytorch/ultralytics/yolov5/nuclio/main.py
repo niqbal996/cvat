@@ -23,7 +23,7 @@ def handler(context, event):
     context.logger.info("call handler")
     data = event.body
     buf = io.BytesIO(base64.b64decode(data['image']))
-    image = Image.open(buf)
+    image = Image.open(buf).convert('RGB')
 
     polygon = context.user_data.model.handle(image)
     return context.Response(body=json.dumps(polygon),
