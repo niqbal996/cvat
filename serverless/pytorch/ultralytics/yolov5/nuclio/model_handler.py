@@ -68,7 +68,7 @@ class ModelHandler:
     def handle(self, image):
         with torch.no_grad():
             cv_image = np.array(image)
-            cv_image = cv2.resize(cv_image, (512, 512), interpolation=cv2.INTER_NEAREST)
+            cv_image = cv2.resize(cv_image, (700, 1280), interpolation=cv2.INTER_NEAREST)
             img_size = cv_image.shape[0:2]
             cv_image = cv2.cvtColor(np.array(cv_image), cv2.COLOR_RGB2BGR)
             cv_image = np.transpose(cv_image, (2, 0, 1)).astype(np.float32) # channels first
