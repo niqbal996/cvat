@@ -6,6 +6,7 @@ import os
 import torch
 import torch.nn as nn
 import numpy as np
+import cv2
 # from dataloaders import helpers
 from models.common import Conv
 from models.yolo import Model
@@ -66,13 +67,13 @@ class ModelHandler:
     def handle(self, image):
         with torch.no_grad():
             cv_image = np.array(image)
+            cv_image = cv2.resize(cv_image, (512, 512), interpolation=cv2.INTER_NEAREST)
             img_size = cv_image.shape[0:2]
             cv_image = cv_image[:, :, ::-1]
             cv_image = np.transpose(cv_image, (2, 0, 1)).astype(np.float32)
             cv_image = np.expand_dims(cv_image, axis=0)
             cv_image /= 255.0
             pred = self.net(torch.Tensor(cv_image).to(self.device))[0]
-
             pred = non_max_suppression(pred)
             pred = scale_boxes(pred, img_size)
             return pred
