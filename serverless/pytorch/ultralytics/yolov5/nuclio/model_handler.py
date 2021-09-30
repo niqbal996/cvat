@@ -72,10 +72,10 @@ class ModelHandler:
             img_size = cv_image.shape[0:2]
             cv_image = cv2.cvtColor(np.array(cv_image), cv2.COLOR_RGB2BGR)
             cv_image = np.transpose(cv_image, (2, 0, 1)).astype(np.float32) # channels first
-            cv_image = np.expand_dims(cv_image, axis=0)
             cv_image /= 255.0
+            cv_image = np.expand_dims(cv_image, axis=0)
             pred = self.net(torch.Tensor(cv_image).to(self.device))[0]
-            pred = non_max_suppression(pred, conf_thres=0.6, iou_thres=0.4)
+            pred = non_max_suppression(pred, conf_thres=0.25, iou_thres=0.45)
             polygons = []
             for det in enumerate(pred):  # detections per image
                 if len(det):
