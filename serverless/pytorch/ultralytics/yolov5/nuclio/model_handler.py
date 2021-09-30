@@ -68,14 +68,14 @@ class ModelHandler:
     def handle(self, image):
         with torch.no_grad():
             cv_image = np.asarray(image)
-            cv_image = cv2.resize(cv_image, (720, 1280), interpolation=cv2.INTER_NEAREST)
+            cv_image = cv2.resize(cv_image, (380, 640), interpolation=cv2.INTER_NEAREST)
             img_size = cv_image.shape[0:2]
             cv_image = cv2.cvtColor(np.array(cv_image), cv2.COLOR_RGB2BGR)
             cv_image = np.transpose(cv_image, (2, 0, 1)).astype(np.float32) # channels first
             cv_image /= 255.0
             cv_image = np.expand_dims(cv_image, axis=0)
             pred = self.net(torch.from_numpy(cv_image).to(self.device))[0]
-            pred = non_max_suppression(pred, conf_thres=0.0, iou_thres=0.0)
+            pred = non_max_suppression(pred, conf_thres=0.25, iou_thres=0.45)
             polygons = []
             for det in enumerate(pred):  # detections per image
                 if len(det):
@@ -102,11 +102,6 @@ class ModelHandler:
                         #     plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
                         #     if save_crop:
                         #         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-            polygons.append({ "confidence": str(1),
-                                        "label": str("Maize"),
-                                        "points": [10, 200, 100, 456],
-                                        "type": "rectangle",
-                                       })
-
+            polygons.append({ "confidence": str(1),"label": str("maize"),"points": [10, 200, 100, 456],"type": "rectangle"})
             return polygons
 
