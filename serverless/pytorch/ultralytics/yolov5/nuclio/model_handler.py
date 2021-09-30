@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import os
+from numpy.lib.polynomial import poly
 import torch
 import torch.nn as nn
 import numpy as np
@@ -74,7 +75,27 @@ class ModelHandler:
             cv_image = np.expand_dims(cv_image, axis=0)
             cv_image /= 255.0
             pred = self.net(torch.Tensor(cv_image).to(self.device))[0]
-            pred = non_max_suppression(pred)
-            pred = scale_boxes(pred, img_size)
-            return pred
+            pred = non_max_suppression(pred, conf_thres=0.6, iou_thres=0.4)
+            polygons = []
+            for det in enumerate(pred):  # detections per image
+                if len(det):
+                    # Rescale boxes from img_size to im0 size
+                    det[:, :4] = scale_coords(img_size, det[:, :4], cv_image.shape[2:]).round()
+                    # Write results
+                    for *xyxy, conf, cls in reversed(det):
+                        polygons.append([xyxy, cls])
+                        print('hold')
+                        # if save_txt:  # Write to file
+                        #     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                        #     line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
+                        #     with open(txt_path + '.txt', 'a') as f:
+                        #         f.write(('%g ' * len(line)).rstrip() % line + '\n')
+
+                        # if save_img or save_crop or view_img:  # Add bbox to image
+                        #     c = int(cls)  # integer class
+                        #     label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
+                        #     plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
+                        #     if save_crop:
+                        #         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+            return polygons
 
