@@ -65,15 +65,15 @@ class ModelHandler:
 
     def handle(self, image):
         with torch.no_grad():
-            cv_image = np.array(image)
-            img_size = cv_image.shape[0:2]
-            cv_image = cv_image[:, :, ::-1]
-            cv_image = np.transpose(cv_image, (2, 0, 1)).astype(np.float32)
-            cv_image = np.expand_dims(cv_image, axis=0)
-            cv_image /= 255.0
-            pred = self.net(torch.Tensor(cv_image).to(self.device))[0]
+            # cv_image = np.array(image)
+            # img_size = cv_image.shape[0:2]
+            # cv_image = cv_image[:, :, ::-1]
+            # cv_image = np.transpose(cv_image, (2, 0, 1)).astype(np.float32)
+            # cv_image = np.expand_dims(cv_image, axis=0)
+            # cv_image /= 255.0
+            # pred = self.net(torch.Tensor(cv_image).to(self.device))[0]
 
             # pred = non_max_suppression(pred)
             # pred = scale_boxes(pred, img_size)
-            return pred
+            return [2.0, 3.0]
 
