@@ -75,7 +75,7 @@ class ModelHandler:
             cv_image /= 255.0
             cv_image = np.expand_dims(cv_image, axis=0)
             pred = self.net(torch.Tensor(cv_image).to(self.device))[0]
-            pred = non_max_suppression(pred, conf_thres=0.25, iou_thres=0.45)
+            pred = non_max_suppression(pred, conf_thres=0.0, iou_thres=0.0)
             polygons = []
             for det in enumerate(pred):  # detections per image
                 if len(det):
