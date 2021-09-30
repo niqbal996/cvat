@@ -83,7 +83,12 @@ class ModelHandler:
                     det[:, :4] = scale_coords(img_size, det[:, :4], cv_image.shape[2:]).round()
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
-                        polygons.append([xyxy, cls])
+                        polygons.append({ "confidence": str(conf),
+                                        "label": cls,
+                                        "points": [xtl, ytl, xbr, ybr],
+                                        "type": "rectangle",
+                                       })
+
                         print('hold')
                         # if save_txt:  # Write to file
                         #     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
