@@ -40,6 +40,8 @@ spec:
         - kind: RUN
           value: apt-get update && apt-get install -y python3-opencv && pip install opencv-python
         - kind: RUN
+          value: apt install -y ssh
+        - kind: RUN
           value: conda install -c anaconda pillow numpy
         - kind: RUN
           value: pip install debugpy
