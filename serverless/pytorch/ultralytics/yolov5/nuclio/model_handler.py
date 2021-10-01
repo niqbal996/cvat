@@ -81,7 +81,7 @@ class ModelHandler:
                     det[:, :4] = scale_coords(cv_image.shape[2:], det[:, :4], orig_size).round()
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
-                        polygons.append({"confidence": str(conf),
+                        polygons.append({"confidence": str(float(conf.cpu())),
                                         "label": self.names[int(cls)],
                                         "points": [int(np.array(i.cpu())) for i in xyxy],
                                         "type": "rectangle",
