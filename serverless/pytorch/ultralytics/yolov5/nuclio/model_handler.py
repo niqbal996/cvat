@@ -53,7 +53,7 @@ def attempt_load(weights, map_location=None, inplace=True):
 
 class ModelHandler:
     def __init__(self):
-        base_dir = os.environ.get("MODEL_PATH", "/opt/nuclio/yolov5")
+        base_dir = os.environ.get("MODEL_PATH", "/opt/nuclio")
         model_path = os.path.join(base_dir, "yolov5.pt")
         self.device = torch.device("cpu")
         self.net = attempt_load(model_path, map_location=self.device)  # load FP32 model
