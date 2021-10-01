@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 from models.common import Conv
 from utils.postprocess import non_max_suppression, scale_coords
+from utils.augmentations import letterbox
 
 class Ensemble(nn.ModuleList):
     # Ensemble of models
@@ -57,6 +58,7 @@ class ModelHandler:
         model_path = os.path.join(base_dir, "yolov5.pt")
         self.device = torch.device("cpu")
         self.net = attempt_load(model_path, map_location=self.device)  # load FP32 model
+        self.stride = int(self.net.stride.max())
         self.net.eval()
         self.names = self.net.module.names if hasattr(self.net, 'module') else self.net.names # get class names
         self.names[0] = 'Maize'
@@ -66,7 +68,8 @@ class ModelHandler:
         with torch.no_grad():
             cv_image = np.asarray(image)
             orig_size = cv_image.shape[0:2]
-            cv_image = cv2.resize(cv_image, (380, 640), interpolation=cv2.INTER_NEAREST)
+            # cv_image = cv2.resize(cv_image, (380, 640), interpolation=cv2.INTER_NEAREST)
+            cv_image = letterbox(cv_image, int(orig_size[1]/2), stride=self.stride)[0]
             # cv_image = cv2.cvtColor(np.array(cv_image), cv2.COLOR_BGR2RGB)
             cv_image = np.transpose(cv_image, (2, 0, 1)).astype(np.float32) # channels first
             cv_image /= 255.0
