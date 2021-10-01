@@ -58,7 +58,7 @@ spec:
         - kind: RUN
           value: wget https://raw.githubusercontent.com/niqbal996/cvat/develop/yolov5.pt
         - kind: WORKDIR
-          value: /opt/nuclio/yolov5
+          value: /opt/nuclio
         - kind: ENTRYPOINT
           value: '["conda", "run", "-n", "yolo"]'
   triggers:
