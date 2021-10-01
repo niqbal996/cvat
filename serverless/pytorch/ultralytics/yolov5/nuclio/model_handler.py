@@ -57,9 +57,9 @@ class ModelHandler:
         base_dir = os.environ.get("MODEL_PATH", "/opt/nuclio/yolov5")
         model_path = os.path.join(base_dir, "yolov5.pt")
         self.device = torch.device("cpu")
-        self.net = attempt_load(model_path, map_location=device)  # load FP32 model
+        self.net = attempt_load(model_path, map_location=self.device)  # load FP32 model
         self.net.eval()
-        self.names = model.module.names if hasattr(model, 'module') else model.names # get class names
+        self.names = self.net.module.names if hasattr(self.net, 'module') else self.net.names # get class names
         self.names[0] = 'Maize'
         self.names[1] = 'Weed'
 
@@ -78,7 +78,7 @@ class ModelHandler:
             for i, det in enumerate(pred):  # detections per image
                 if len(det):
                     # Rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(img_size[2:], det[:, :4], orig_size).round()
+                    det[:, :4] = scale_coords(cv_image.shape[2:], det[:, :4], orig_size).round()
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
                         polygons.append({"confidence": str(conf),
