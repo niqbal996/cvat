@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 import cv2
-# from dataloaders import helpers
 from models.common import Conv
 from utils.postprocess import non_max_suppression, scale_coords
 
@@ -74,18 +73,24 @@ class ModelHandler:
             cv_image = np.expand_dims(cv_image, axis=0)
             pred = self.net(torch.from_numpy(cv_image).to(self.device))[0]
             pred = non_max_suppression(pred, conf_thres=0.25, iou_thres=0.45)
-            polygons = []
+            results = []
             for i, det in enumerate(pred):  # detections per image
                 if len(det):
                     # Rescale boxes from img_size to im0 size
                     det[:, :4] = scale_coords(cv_image.shape[2:], det[:, :4], orig_size).round()
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
-                        polygons.append({"confidence": str(round(float(conf.cpu()), 2)),
+                        results.append({"confidence": str(round(float(conf.cpu()), 2)),
                                         "label": self.names[int(cls)],
                                         "points": [int(np.array(i.cpu())) for i in xyxy],
                                         "type": "rectangle",
                                         })
-            # polygons.append({ "confidence": str(1),"label": str("maize"),"points": [10, 200, 100, 456],"type": "rectangle"})
-            return polygons
+                        # results.append({
+                        #                 "confidence": str(obj['confidence']),
+                        #                 "label": self.labels.get(obj_class, "unknown"),
+                        #                 "points": [xtl, ytl, xbr, ybr],
+                        #                 "type": "rectangle",
+                        #                 })
+            results.append({ "confidence": str(0.5),"label": str("maize"),"points": [10, 200, 400, 456],"type": "rectangle"})
+            return results
 
