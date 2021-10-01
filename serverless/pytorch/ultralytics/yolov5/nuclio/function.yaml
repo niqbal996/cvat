@@ -7,8 +7,8 @@ metadata:
     framework: pytorch
     spec: |
         [
-          { "id": 1, "name": "maize" },
-          { "id": 2, "name": "weed" }
+          { "id": 1, "name": "Maize" },
+          { "id": 2, "name": "Weed" }
         ]
 spec:
   description: YOLO v5 Crop detector via PyTorch

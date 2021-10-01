@@ -3,14 +3,12 @@
 # SPDX-License-Identifier: MIT
 
 import os
-from numpy.lib.polynomial import poly
 import torch
 import torch.nn as nn
 import numpy as np
 import cv2
 # from dataloaders import helpers
 from models.common import Conv
-from models.yolo import Model
 from utils.postprocess import non_max_suppression, scale_coords
 
 class Ensemble(nn.ModuleList):
@@ -30,7 +28,7 @@ class Ensemble(nn.ModuleList):
 
 
 def attempt_load(weights, map_location=None, inplace=True):
-    from serverless.pytorch.ultralytics.yolov5.nuclio.models.yolo import Detect, Model
+    from models.yolo import Detect, Model
 
     # Loads an ensemble of models weights=[a,b,c] or a single model weights=[a] or weights=a
     model = Ensemble()
@@ -59,49 +57,35 @@ class ModelHandler:
         base_dir = os.environ.get("MODEL_PATH", "/opt/nuclio/yolov5")
         model_path = os.path.join(base_dir, "yolov5.pt")
         self.device = torch.device("cpu")
-        self.net = Model(cfg='./yolov5m.yaml')
-
-        pretrained_dict = torch.load(model_path, map_location=self.device)
-        self.net.load_state_dict(pretrained_dict, strict=False)
+        self.net = attempt_load(model_path, map_location=device)  # load FP32 model
         self.net.eval()
+        self.names = model.module.names if hasattr(model, 'module') else model.names # get class names
+        self.names[0] = 'Maize'
+        self.names[1] = 'Weed'
 
     def handle(self, image):
         with torch.no_grad():
             cv_image = np.asarray(image)
+            orig_size = cv_image.shape[0:2]
             cv_image = cv2.resize(cv_image, (380, 640), interpolation=cv2.INTER_NEAREST)
-            img_size = cv_image.shape[0:2]
-            cv_image = cv2.cvtColor(np.array(cv_image), cv2.COLOR_RGB2BGR)
+            # cv_image = cv2.cvtColor(np.array(cv_image), cv2.COLOR_BGR2RGB)
             cv_image = np.transpose(cv_image, (2, 0, 1)).astype(np.float32) # channels first
             cv_image /= 255.0
             cv_image = np.expand_dims(cv_image, axis=0)
             pred = self.net(torch.from_numpy(cv_image).to(self.device))[0]
             pred = non_max_suppression(pred, conf_thres=0.25, iou_thres=0.45)
             polygons = []
-            for det in enumerate(pred):  # detections per image
+            for i, det in enumerate(pred):  # detections per image
                 if len(det):
                     # Rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(img_size, det[:, :4], cv_image.shape[2:]).round()
+                    det[:, :4] = scale_coords(img_size[2:], det[:, :4], orig_size).round()
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
-                        polygons.append({ "confidence": str(conf),
-                                        "label": str(cls),
-                                        "points": xyxy,
+                        polygons.append({"confidence": str(conf),
+                                        "label": self.names[int(cls)],
+                                        "points": [int(np.array(i.cpu())) for i in xyxy],
                                         "type": "rectangle",
                                         })
-
-                        print('hold')
-                        # if save_txt:  # Write to file
-                        #     xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        #     line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                        #     with open(txt_path + '.txt', 'a') as f:
-                        #         f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-                        # if save_img or save_crop or view_img:  # Add bbox to image
-                        #     c = int(cls)  # integer class
-                        #     label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                        #     plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
-                        #     if save_crop:
-                        #         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-            polygons.append({ "confidence": str(1),"label": str("maize"),"points": [10, 200, 100, 456],"type": "rectangle"})
+            # polygons.append({ "confidence": str(1),"label": str("maize"),"points": [10, 200, 100, 456],"type": "rectangle"})
             return polygons
 
