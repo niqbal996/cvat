@@ -45,6 +45,8 @@ For the Nuclio Image Processing Docker Container to apply masking on the NIR ima
 
 The Nuclio Image Processing container recieves an RGB Image and needs to apply thresholding to the NIR image. For this it needs a matching mechanism for finding the right NIR image for the given RGB image. The filename of the image is not passed by default to Nuclio and needs to be added. Right now the system works by using an arbitrary image the path of which is hardcoded in the thresholding function.
 
+We already know the request for sending the image is generated inside Javascript [here](https://github.com/openvinotoolkit/cvat/blob/develop/cvat-core/src/lambda-manager.js#L10) and this call calls the backend, which is written in Python/Django [here](https://github.com/openvinotoolkit/cvat/blob/ad11b587b516b1562d78f7fe9c82f9cb9ec161a1/cvat/apps/lambda_manager/views.py#L38). However, the python lambda function is different in the our version of CVAT and the URLs provided point to the latest.
+
 #### Change Mask to Polygon Conversion Technique
 
 The conversion technique availble in the `masktopolygon.py` file could be different. This can be achieved by changing the implementation of the `convert_mask_to_polygon` function in the file.
