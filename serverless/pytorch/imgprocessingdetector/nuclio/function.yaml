@@ -1,0 +1,51 @@
+metadata:
+  name: awesomector
+  namespace: cvat
+  annotations:
+    name: Image Processing Based Detector
+    type: detector
+    framework: open-cv
+    spec: |
+      [
+        { "id": 1, "name": "crop" }
+      ]
+
+spec:
+  description: Open CV Based detector
+  runtime: 'python:3.9'
+  handler: main:handler
+  eventTimeout: 30s
+
+  build:
+    image: opencv-thresh
+    baseImage: python:3.9.1
+
+    directives:
+      preCopy:
+        - kind: RUN
+          value: apt-get update
+        - kind: RUN
+          value: apt-get install ffmpeg libsm6 libxext6  -y
+        - kind: WORKDIR
+          value: /opt/nuclio
+        - kind: RUN
+          value: python3 -m pip install opencv-python matplotlib scipy scikit-image
+        - kind: ADD
+          value: \* detector/
+        - kind: RUN
+          value: python3 detector/detector.py
+
+  triggers:
+    myHttpTrigger:
+      maxWorkers: 2
+      kind: 'http'
+      workerAvailabilityTimeoutMilliseconds: 10000
+      attributes:
+        maxRequestBodySize: 33554432 # 32MB
+
+  platform:
+    attributes:
+      restartPolicy:
+        name: always
+        maximumRetryCount: 3
+      mountMode: volume
