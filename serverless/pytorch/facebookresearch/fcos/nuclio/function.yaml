@@ -30,7 +30,7 @@ spec:
         - kind: WORKDIR
           value: /opt/nuclio
         - kind: RUN
-          value: pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
+          value: pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu -f https://download.pytorch.org/whl/torch_stable.html
         - kind: RUN
           value: git clone https://github.com/104H/detectron2.git; cd detectron2; pip3 install .; pip3 install omegaconf==2.1.1
         - kind: ADD
