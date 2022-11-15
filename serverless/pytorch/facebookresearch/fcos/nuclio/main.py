@@ -29,8 +29,7 @@ def init_context(context):
     cfg_file = "detectron2/configs/COCO-Detection/fcos_R_50_FPN_1x_maize.py"
     cfg = LazyConfig.load(cfg_file)
     cfg.train.output_dir = "fcos-output/"
-    cfg.dataloader.test.num_workers = 0 # for debugging
-    # cfg = LazyConfig.apply_overrides(cfg, args.opts)
+    cfg.dataloader.test.num_workers = 2
     default_setup(cfg, None)
 
     '''
