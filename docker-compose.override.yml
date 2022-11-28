@@ -1,0 +1,15 @@
+version: '3.3'
+
+services:
+  cvat_server:
+    environment:
+      CVAT_SHARE_URL: 'Mounted from /mnt/share host directory'
+    volumes:
+      - cvat_share:/home/django/share/haca:ro
+
+volumes:
+  cvat_share:
+    driver_opts:
+      type: none
+      device: /home/niqbal/haca_mount
+      o: bind
