@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -9,8 +9,7 @@ import { Row, Col } from 'antd/lib/grid';
 import Title from 'antd/lib/typography/Title';
 import Text from 'antd/lib/typography/Text';
 
-import getCore from 'cvat-core-wrapper';
-import { Project } from 'reducers/interfaces';
+import { getCore } from 'cvat-core-wrapper';
 import { updateProjectAsync } from 'actions/projects-actions';
 import LabelsEditor from 'components/labels-editor/labels-editor';
 import BugTrackerEditor from 'components/task-page/bug-tracker-editor';
@@ -19,7 +18,7 @@ import UserSelector from 'components/task-page/user-selector';
 const core = getCore();
 
 interface DetailsComponentProps {
-    project: Project;
+    project: any;
 }
 
 export default function DetailsComponent(props: DetailsComponentProps): JSX.Element {

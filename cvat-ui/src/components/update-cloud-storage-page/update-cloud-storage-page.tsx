@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -11,7 +11,7 @@ import Spin from 'antd/lib/spin';
 import Result from 'antd/lib/result';
 import Text from 'antd/lib/typography/Text';
 
-import { CombinedState } from 'reducers/interfaces';
+import { CombinedState } from 'reducers';
 import { getCloudStoragesAsync } from 'actions/cloud-storage-actions';
 import CreateCloudStorageForm from 'components/create-cloud-storage-page/cloud-storage-form';
 
@@ -24,8 +24,7 @@ export default function UpdateCloudStoragePageComponent(): JSX.Element {
     const cloudStorageId = +useParams<ParamType>().id;
     const isFetching = useSelector((state: CombinedState) => state.cloudStorages.fetching);
     const isInitialized = useSelector((state: CombinedState) => state.cloudStorages.initialized);
-    const cloudStorages = useSelector((state: CombinedState) => state.cloudStorages.current)
-        .map((cloudStrage) => cloudStrage.instance);
+    const cloudStorages = useSelector((state: CombinedState) => state.cloudStorages.current);
     const [cloudStorage] = cloudStorages.filter((_cloudStorage) => _cloudStorage.id === cloudStorageId);
 
     useEffect(() => {

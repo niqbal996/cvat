@@ -1,25 +1,22 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import './styles.scss';
 import React from 'react';
 import Tabs from 'antd/lib/tabs';
-import Button from 'antd/lib/button';
 import Text from 'antd/lib/typography/Text';
 import ModalConfirm from 'antd/lib/modal/confirm';
-import copy from 'copy-to-clipboard';
 import {
-    CopyOutlined, EditOutlined, BuildOutlined, ExclamationCircleOutlined,
+    EditOutlined, BuildOutlined, ExclamationCircleOutlined,
 } from '@ant-design/icons';
 
-import CVATTooltip from 'components/common/cvat-tooltip';
+import { RawLabel, RawAttribute } from 'cvat-core-wrapper';
 import RawViewer from './raw-viewer';
 import ConstructorViewer from './constructor-viewer';
 import ConstructorCreator from './constructor-creator';
 import ConstructorUpdater from './constructor-updater';
-
-import { idGenerator, Label, Attribute } from './common';
+import { idGenerator, LabelOptColor } from './common';
 
 enum ConstructorMode {
     SHOW = 'SHOW',
@@ -28,15 +25,16 @@ enum ConstructorMode {
 }
 
 interface LabelsEditorProps {
-    labels: Label[];
-    onSubmit: (labels: any[]) => void;
+    labels: RawLabel[];
+    onSubmit: (labels: LabelOptColor[]) => void;
 }
 
 interface LabelsEditorState {
     constructorMode: ConstructorMode;
-    savedLabels: Label[];
-    unsavedLabels: Label[];
-    labelForUpdate: Label | null;
+    creatorType: 'basic' | 'skeleton';
+    savedLabels: LabelOptColor[];
+    unsavedLabels: LabelOptColor[];
+    labelForUpdate: LabelOptColor | null;
 }
 
 export default class LabelsEditor extends React.PureComponent<LabelsEditorProps, LabelsEditorState> {
@@ -47,6 +45,7 @@ export default class LabelsEditor extends React.PureComponent<LabelsEditorProps,
             savedLabels: [],
             unsavedLabels: [],
             constructorMode: ConstructorMode.SHOW,
+            creatorType: 'basic',
             labelForUpdate: null,
         };
     }
@@ -57,18 +56,22 @@ export default class LabelsEditor extends React.PureComponent<LabelsEditorProps,
     }
 
     public componentDidUpdate(prevProps: LabelsEditorProps): void {
-        function transformLabel(label: any): Label {
+        function transformLabel(label: RawLabel): LabelOptColor {
             return {
                 name: label.name,
                 id: label.id || idGenerator(),
                 color: label.color,
+                type: label.type,
+                sublabels: label.sublabels,
+                svg: label.svg,
                 attributes: label.attributes.map(
-                    (attr: any): Attribute => ({
+                    (attr: RawAttribute): RawAttribute => ({
                         id: attr.id || idGenerator(),
                         name: attr.name,
                         input_type: attr.input_type,
                         mutable: attr.mutable,
                         values: [...attr.values],
+                        default_value: attr.values[0],
                     }),
                 ),
             };
@@ -79,18 +82,18 @@ export default class LabelsEditor extends React.PureComponent<LabelsEditorProps,
         if (!prevProps || prevProps.labels !== labels) {
             const transformedLabels = labels.map(transformLabel);
             this.setState({
-                savedLabels: transformedLabels.filter((label: Label) => label.id >= 0),
-                unsavedLabels: transformedLabels.filter((label: Label) => label.id < 0),
+                savedLabels: transformedLabels.filter((label: LabelOptColor) => (label.id as number) >= 0),
+                unsavedLabels: transformedLabels.filter((label: LabelOptColor) => (label.id as number) < 0),
             });
         }
     }
 
-    private handleRawSubmit = (labels: Label[]): void => {
+    private handleRawSubmit = (labels: LabelOptColor[]): void => {
         const unsavedLabels = [];
         const savedLabels = [];
 
         for (const label of labels) {
-            if (label.id >= 0) {
+            if (label.id as number >= 0) {
                 savedLabels.push(label);
             } else {
                 unsavedLabels.push(label);
@@ -101,56 +104,55 @@ export default class LabelsEditor extends React.PureComponent<LabelsEditorProps,
         this.handleSubmit(savedLabels, unsavedLabels);
     };
 
-    private handleCreate = (label: Label | null): void => {
-        if (label === null) {
-            this.setState({ constructorMode: ConstructorMode.SHOW });
-        } else {
-            const { unsavedLabels, savedLabels } = this.state;
-            const newUnsavedLabels = [
-                ...unsavedLabels,
-                {
-                    ...label,
-                    id: idGenerator(),
-                },
-            ];
+    private handleCreate = (label: LabelOptColor): void => {
+        const { unsavedLabels, savedLabels } = this.state;
+        const newUnsavedLabels = [
+            ...unsavedLabels,
+            {
+                ...label,
+                id: idGenerator(),
+            },
+        ];
 
-            this.setState({ unsavedLabels: newUnsavedLabels });
-            this.handleSubmit(savedLabels, newUnsavedLabels);
-        }
+        this.setState({ unsavedLabels: newUnsavedLabels });
+        this.handleSubmit(savedLabels, newUnsavedLabels);
     };
 
-    private handleUpdate = (label: Label | null): void => {
+    private handleUpdate = (label: LabelOptColor): void => {
         const { savedLabels, unsavedLabels } = this.state;
 
-        if (label) {
-            const filteredSavedLabels = savedLabels.filter((_label: Label) => _label.id !== label.id);
-            const filteredUnsavedLabels = unsavedLabels.filter((_label: Label) => _label.id !== label.id);
-            if (label.id >= 0) {
-                filteredSavedLabels.push(label);
-                this.setState({
-                    savedLabels: filteredSavedLabels,
-                    constructorMode: ConstructorMode.SHOW,
-                });
-            } else {
-                filteredUnsavedLabels.push(label);
-                this.setState({
-                    unsavedLabels: filteredUnsavedLabels,
-                    constructorMode: ConstructorMode.SHOW,
-                });
-            }
-
-            this.handleSubmit(filteredSavedLabels, filteredUnsavedLabels);
+        const filteredSavedLabels = savedLabels.filter((_label: LabelOptColor) => _label.id !== label.id);
+        const filteredUnsavedLabels = unsavedLabels.filter((_label: LabelOptColor) => _label.id !== label.id);
+        if (label.id as number >= 0) {
+            filteredSavedLabels.push(label);
+            this.setState({
+                savedLabels: filteredSavedLabels,
+                constructorMode: ConstructorMode.SHOW,
+            });
         } else {
-            this.setState({ constructorMode: ConstructorMode.SHOW });
+            filteredUnsavedLabels.push(label);
+            this.setState({
+                unsavedLabels: filteredUnsavedLabels,
+                constructorMode: ConstructorMode.SHOW,
+            });
         }
+
+        this.handleSubmit(filteredSavedLabels, filteredUnsavedLabels);
+        this.setState({ constructorMode: ConstructorMode.SHOW });
     };
 
-    private handleDelete = (label: Label): void => {
+    private handlerCancel = (): void => {
+        this.setState({ constructorMode: ConstructorMode.SHOW });
+    };
+
+    private handleDelete = (label: LabelOptColor): void => {
         const deleteLabel = (): void => {
             const { unsavedLabels, savedLabels } = this.state;
 
-            const filteredUnsavedLabels = unsavedLabels.filter((_label: Label): boolean => _label.id !== label.id);
-            const filteredSavedLabels = savedLabels.filter((_label: Label): boolean => _label.id !== label.id);
+            const filteredUnsavedLabels = unsavedLabels
+                .filter((_label: LabelOptColor): boolean => _label.id !== label.id);
+            const filteredSavedLabels = savedLabels
+                .filter((_label: LabelOptColor): boolean => _label.id !== label.id);
 
             this.setState({ savedLabels: filteredSavedLabels, unsavedLabels: filteredUnsavedLabels });
             this.handleSubmit(filteredSavedLabels, filteredUnsavedLabels);
@@ -159,8 +161,8 @@ export default class LabelsEditor extends React.PureComponent<LabelsEditorProps,
         if (typeof label.id !== 'undefined' && label.id >= 0) {
             ModalConfirm({
                 className: 'cvat-modal-delete-label',
-                title: `Do you want to delete "${label.name}" label?`,
                 icon: <ExclamationCircleOutlined />,
+                title: `Do you want to delete "${label.name}" label?`,
                 content: 'This action is irreversible. Annotation corresponding with this label will be deleted.',
                 type: 'warning',
                 okType: 'danger',
@@ -173,25 +175,35 @@ export default class LabelsEditor extends React.PureComponent<LabelsEditorProps,
         }
     };
 
-    private handleSubmit(savedLabels: Label[], unsavedLabels: Label[]): void {
-        function transformLabel(label: Label): any {
-            return {
+    private handleSubmit(savedLabels: LabelOptColor[], unsavedLabels: LabelOptColor[]): void {
+        function transformLabel(label: LabelOptColor): LabelOptColor {
+            const transformed: any = {
                 name: label.name,
-                id: label.id < 0 ? undefined : label.id,
+                id: label.id as number < 0 ? undefined : label.id,
                 color: label.color,
-                attributes: label.attributes.map((attr: Attribute): any => ({
+                type: label.type || 'any',
+                attributes: label.attributes.map((attr: RawAttribute): RawAttribute => ({
                     name: attr.name,
-                    id: attr.id < 0 ? undefined : attr.id,
-                    input_type: attr.input_type.toLowerCase(),
+                    id: attr.id as number < 0 ? undefined : attr.id,
+                    input_type: attr.input_type.toLowerCase() as RawAttribute['input_type'],
                     default_value: attr.values[0],
                     mutable: attr.mutable,
                     values: [...attr.values],
                 })),
             };
+
+            if (label.type === 'skeleton') {
+                transformed.svg = label.svg;
+                transformed.sublabels = (label.sublabels || [])
+                    .map((internalLabel: LabelOptColor) => transformLabel(internalLabel));
+            }
+
+            return transformed;
         }
 
         const { onSubmit } = this.props;
-        const output = savedLabels.concat(unsavedLabels).map((label: Label): any => transformLabel(label));
+        const output = savedLabels.concat(unsavedLabels)
+            .map((label: LabelOptColor): LabelOptColor => transformLabel(label));
 
         onSubmit(output);
     }
@@ -199,40 +211,15 @@ export default class LabelsEditor extends React.PureComponent<LabelsEditorProps,
     public render(): JSX.Element {
         const { labels } = this.props;
         const {
-            savedLabels, unsavedLabels, constructorMode, labelForUpdate,
+            savedLabels, unsavedLabels, constructorMode, labelForUpdate, creatorType,
         } = this.state;
+        const savedAndUnsavedLabels = [...savedLabels, ...unsavedLabels];
 
         return (
             <Tabs
                 defaultActiveKey='2'
                 type='card'
                 tabBarStyle={{ marginBottom: '0px' }}
-                tabBarExtraContent={(
-                    <CVATTooltip title='Copied to clipboard!' trigger='click'>
-                        <Button
-                            type='link'
-                            icon={<CopyOutlined />}
-                            onClick={(): void => {
-                                copy(
-                                    JSON.stringify(
-                                        savedLabels.concat(unsavedLabels).map((label): any => ({
-                                            ...label,
-                                            id: undefined,
-                                            attributes: label.attributes.map((attribute): any => ({
-                                                ...attribute,
-                                                id: undefined,
-                                            })),
-                                        })),
-                                        null,
-                                        4,
-                                    ),
-                                );
-                            }}
-                        >
-                            Copy
-                        </Button>
-                    </CVATTooltip>
-                )}
             >
                 <Tabs.TabPane
                     tab={(
@@ -243,7 +230,7 @@ export default class LabelsEditor extends React.PureComponent<LabelsEditorProps,
                     )}
                     key='1'
                 >
-                    <RawViewer labels={[...savedLabels, ...unsavedLabels]} onSubmit={this.handleRawSubmit} />
+                    <RawViewer labels={savedAndUnsavedLabels} onSubmit={this.handleRawSubmit} />
                 </Tabs.TabPane>
 
                 <Tabs.TabPane
@@ -257,26 +244,36 @@ export default class LabelsEditor extends React.PureComponent<LabelsEditorProps,
                 >
                     {constructorMode === ConstructorMode.SHOW && (
                         <ConstructorViewer
-                            labels={[...savedLabels, ...unsavedLabels]}
-                            onUpdate={(label: Label): void => {
+                            labels={savedAndUnsavedLabels}
+                            onUpdate={(label: LabelOptColor): void => {
                                 this.setState({
                                     constructorMode: ConstructorMode.UPDATE,
                                     labelForUpdate: label,
                                 });
                             }}
                             onDelete={this.handleDelete}
-                            onCreate={(): void => {
+                            onCreate={(_creatorType: 'basic' | 'skeleton'): void => {
                                 this.setState({
+                                    creatorType: _creatorType,
                                     constructorMode: ConstructorMode.CREATE,
                                 });
                             }}
                         />
                     )}
                     {constructorMode === ConstructorMode.UPDATE && labelForUpdate !== null && (
-                        <ConstructorUpdater label={labelForUpdate} onUpdate={this.handleUpdate} />
+                        <ConstructorUpdater
+                            label={labelForUpdate}
+                            onUpdate={this.handleUpdate}
+                            onCancel={this.handlerCancel}
+                        />
                     )}
                     {constructorMode === ConstructorMode.CREATE && (
-                        <ConstructorCreator labelNames={labels.map((l) => l.name)} onCreate={this.handleCreate} />
+                        <ConstructorCreator
+                            creatorType={creatorType}
+                            labelNames={labels.map((l) => l.name)}
+                            onCreate={this.handleCreate}
+                            onCancel={this.handlerCancel}
+                        />
                     )}
                 </Tabs.TabPane>
             </Tabs>

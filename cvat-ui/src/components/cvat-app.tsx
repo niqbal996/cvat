@@ -1,4 +1,5 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -13,28 +14,49 @@ import Spin from 'antd/lib/spin';
 import Text from 'antd/lib/typography/Text';
 import 'antd/dist/antd.css';
 
-import GlobalErrorBoundary from 'components/global-error-boundary/global-error-boundary';
-import Header from 'components/header/header';
+import LogoutComponent from 'components/logout-component';
+import LoginPageContainer from 'containers/login-page/login-page';
+import LoginWithTokenComponent from 'components/login-with-token/login-with-token';
+import RegisterPageContainer from 'containers/register-page/register-page';
 import ResetPasswordPageConfirmComponent from 'components/reset-password-confirm-page/reset-password-confirm-page';
 import ResetPasswordPageComponent from 'components/reset-password-page/reset-password-page';
+
+import Header from 'components/header/header';
+import GlobalErrorBoundary from 'components/global-error-boundary/global-error-boundary';
+
 import ShortcutsDialog from 'components/shortcuts-dialog/shortcuts-dialog';
+import ExportDatasetModal from 'components/export-dataset/export-dataset-modal';
+import ExportBackupModal from 'components/export-backup/export-backup-modal';
+import ImportDatasetModal from 'components/import-dataset/import-dataset-modal';
+import ImportBackupModal from 'components/import-backup/import-backup-modal';
+import ModelsPageContainer from 'containers/models-page/models-page';
+
+import JobsPageComponent from 'components/jobs-page/jobs-page';
+
+import TasksPageContainer from 'containers/tasks-page/tasks-page';
+import CreateTaskPageContainer from 'containers/create-task-page/create-task-page';
+import TaskPageContainer from 'containers/task-page/task-page';
+
 import ProjectsPageComponent from 'components/projects-page/projects-page';
 import CreateProjectPageComponent from 'components/create-project-page/create-project-page';
 import ProjectPageComponent from 'components/project-page/project-page';
-import TasksPageContainer from 'containers/tasks-page/tasks-page';
-import LoginWithTokenComponent from 'components/login-with-token/login-with-token';
-import CreateTaskPageContainer from 'containers/create-task-page/create-task-page';
-import TaskPageContainer from 'containers/task-page/task-page';
-import ModelsPageContainer from 'containers/models-page/models-page';
-import AnnotationPageContainer from 'containers/annotation-page/annotation-page';
-import LoginPageContainer from 'containers/login-page/login-page';
-import RegisterPageContainer from 'containers/register-page/register-page';
+
 import CloudStoragesPageComponent from 'components/cloud-storages-page/cloud-storages-page';
 import CreateCloudStoragePageComponent from 'components/create-cloud-storage-page/create-cloud-storage-page';
 import UpdateCloudStoragePageComponent from 'components/update-cloud-storage-page/update-cloud-storage-page';
-import getCore from 'cvat-core-wrapper';
+
+import OrganizationPage from 'components/organization-page/organization-page';
+import CreateOrganizationComponent from 'components/create-organization-page/create-organization-page';
+import { ShortcutsContextProvider } from 'components/shortcuts.context';
+
+import WebhooksPage from 'components/webhooks-page/webhooks-page';
+import CreateWebhookPage from 'components/setup-webhook-pages/create-webhook-page';
+import UpdateWebhookPage from 'components/setup-webhook-pages/update-webhook-page';
+
+import AnnotationPageContainer from 'containers/annotation-page/annotation-page';
+import { getCore } from 'cvat-core-wrapper';
 import GlobalHotKeys, { KeyMap } from 'utils/mousetrap-react';
-import { NotificationsState } from 'reducers/interfaces';
+import { NotificationsState } from 'reducers';
 import { customWaViewHit } from 'utils/enviroment';
 import showPlatformNotification, {
     platformInfo,
@@ -42,7 +64,9 @@ import showPlatformNotification, {
     showUnsupportedNotification,
 } from 'utils/platform-checker';
 import '../styles.scss';
-import EmailConfirmationPage from './email-confirmation-page/email-confirmed';
+import EmailConfirmationPage from './email-confirmation-pages/email-confirmed';
+import EmailVerificationSentPage from './email-confirmation-pages/email-verification-sent';
+import IncorrectEmailConfirmationPage from './email-confirmation-pages/incorrect-email-confirmation';
 
 interface CVATAppProps {
     loadFormats: () => void;
@@ -56,9 +80,12 @@ interface CVATAppProps {
     switchShortcutsDialog: () => void;
     switchSettingsDialog: () => void;
     loadAuthActions: () => void;
+    loadOrganizations: () => void;
     keyMap: KeyMap;
     userInitialized: boolean;
     userFetching: boolean;
+    organizationsFetching: boolean;
+    organizationsInitialized: boolean;
     pluginsInitialized: boolean;
     pluginsFetching: boolean;
     modelsInitialized: boolean;
@@ -149,9 +176,12 @@ class CVATApplication extends React.PureComponent<CVATAppProps & RouteComponentP
             loadUserAgreements,
             initPlugins,
             initModels,
+            loadOrganizations,
             loadAuthActions,
             userInitialized,
             userFetching,
+            organizationsFetching,
+            organizationsInitialized,
             formatsInitialized,
             formatsFetching,
             aboutInitialized,
@@ -187,6 +217,10 @@ class CVATApplication extends React.PureComponent<CVATAppProps & RouteComponentP
 
         if (user == null || !user.isVerified) {
             return;
+        }
+
+        if (!organizationsInitialized && !organizationsFetching) {
+            loadOrganizations();
         }
 
         if (!formatsInitialized && !formatsFetching) {
@@ -287,6 +321,9 @@ class CVATApplication extends React.PureComponent<CVATAppProps & RouteComponentP
             pluginsInitialized,
             formatsInitialized,
             modelsInitialized,
+            organizationsInitialized,
+            userAgreementsInitialized,
+            authActionsInitialized,
             switchShortcutsDialog,
             switchSettingsDialog,
             user,
@@ -295,13 +332,18 @@ class CVATApplication extends React.PureComponent<CVATAppProps & RouteComponentP
             isModelPluginActive,
         } = this.props;
 
-        const readyForRender =
-            (userInitialized && (user == null || !user.isVerified)) ||
-            (userInitialized &&
+        const notRegisteredUserInitialized = (userInitialized && (user == null || !user.isVerified));
+        let readyForRender = userAgreementsInitialized && authActionsInitialized;
+        readyForRender = readyForRender && (notRegisteredUserInitialized ||
+            (
+                userInitialized &&
                 formatsInitialized &&
                 pluginsInitialized &&
                 aboutInitialized &&
-                (!isModelPluginActive || modelsInitialized));
+                organizationsInitialized &&
+                (!isModelPluginActive || modelsInitialized)
+            )
+        );
 
         const subKeyMap = {
             SWITCH_SHORTCUTS: keyMap.SWITCH_SHORTCUTS,
@@ -325,43 +367,62 @@ class CVATApplication extends React.PureComponent<CVATAppProps & RouteComponentP
             if (user && user.isVerified) {
                 return (
                     <GlobalErrorBoundary>
-                        <Layout>
-                            <Header />
-                            <Layout.Content style={{ height: '100%' }}>
-                                <ShortcutsDialog />
-                                <GlobalHotKeys keyMap={subKeyMap} handlers={handlers}>
-                                    <Switch>
-                                        <Route exact path='/projects' component={ProjectsPageComponent} />
-                                        <Route exact path='/projects/create' component={CreateProjectPageComponent} />
-                                        <Route exact path='/projects/:id' component={ProjectPageComponent} />
-                                        <Route exact path='/tasks' component={TasksPageContainer} />
-                                        <Route exact path='/tasks/create' component={CreateTaskPageContainer} />
-                                        <Route exact path='/tasks/:id' component={TaskPageContainer} />
-                                        <Route exact path='/tasks/:tid/jobs/:jid' component={AnnotationPageContainer} />
-                                        <Route exact path='/cloudstorages' component={CloudStoragesPageComponent} />
-                                        <Route
-                                            exact
-                                            path='/cloudstorages/create'
-                                            component={CreateCloudStoragePageComponent}
-                                        />
-                                        <Route
-                                            exact
-                                            path='/cloudstorages/update/:id'
-                                            component={UpdateCloudStoragePageComponent}
-                                        />
-                                        {isModelPluginActive && (
-                                            <Route exact path='/models' component={ModelsPageContainer} />
-                                        )}
-                                        <Redirect
-                                            push
-                                            to={new URLSearchParams(location.search).get('next') || '/tasks'}
-                                        />
-                                    </Switch>
-                                </GlobalHotKeys>
-                                {/* eslint-disable-next-line */}
-                                <a id='downloadAnchor' target='_blank' style={{ display: 'none' }} download />
-                            </Layout.Content>
-                        </Layout>
+                        <ShortcutsContextProvider>
+                            <Layout>
+                                <Header />
+                                <Layout.Content style={{ height: '100%' }}>
+                                    <ShortcutsDialog />
+                                    <GlobalHotKeys keyMap={subKeyMap} handlers={handlers}>
+                                        <Switch>
+                                            <Route exact path='/auth/logout' component={LogoutComponent} />
+                                            <Route exact path='/projects' component={ProjectsPageComponent} />
+                                            <Route exact path='/projects/create' component={CreateProjectPageComponent} />
+                                            <Route exact path='/projects/:id' component={ProjectPageComponent} />
+                                            <Route exact path='/projects/:id/webhooks' component={WebhooksPage} />
+                                            <Route exact path='/tasks' component={TasksPageContainer} />
+                                            <Route exact path='/tasks/create' component={CreateTaskPageContainer} />
+                                            <Route exact path='/tasks/:id' component={TaskPageContainer} />
+                                            <Route exact path='/tasks/:tid/jobs/:jid' component={AnnotationPageContainer} />
+                                            <Route exact path='/jobs' component={JobsPageComponent} />
+                                            <Route exact path='/cloudstorages' component={CloudStoragesPageComponent} />
+                                            <Route
+                                                exact
+                                                path='/cloudstorages/create'
+                                                component={CreateCloudStoragePageComponent}
+                                            />
+                                            <Route
+                                                exact
+                                                path='/cloudstorages/update/:id'
+                                                component={UpdateCloudStoragePageComponent}
+                                            />
+                                            <Route
+                                                exact
+                                                path='/organizations/create'
+                                                component={CreateOrganizationComponent}
+                                            />
+                                            <Route exact path='/organization/webhooks' component={WebhooksPage} />
+                                            <Route exact path='/webhooks/create' component={CreateWebhookPage} />
+                                            <Route exact path='/webhooks/update/:id' component={UpdateWebhookPage} />
+                                            <Route exact path='/organization' component={OrganizationPage} />
+                                            {isModelPluginActive && (
+                                                <Route exact path='/models' component={ModelsPageContainer} />
+                                            )}
+                                            <Redirect
+                                                push
+                                                to={new URLSearchParams(location.search).get('next') || '/tasks'}
+                                            />
+                                        </Switch>
+                                    </GlobalHotKeys>
+                                    {/* eslint-disable-next-line */}
+                                    <ExportDatasetModal />
+                                    <ExportBackupModal />
+                                    <ImportDatasetModal />
+                                    <ImportBackupModal />
+                                    {/* eslint-disable-next-line */}
+                                    <a id='downloadAnchor' target='_blank' style={{ display: 'none' }} download />
+                                </Layout.Content>
+                            </Layout>
+                        </ShortcutsContextProvider>
                     </GlobalErrorBoundary>
                 );
             }
@@ -370,10 +431,12 @@ class CVATApplication extends React.PureComponent<CVATAppProps & RouteComponentP
                 <GlobalErrorBoundary>
                     <Switch>
                         <Route exact path='/auth/register' component={RegisterPageContainer} />
+                        <Route exact path='/auth/email-verification-sent' component={EmailVerificationSentPage} />
+                        <Route exact path='/auth/incorrect-email-confirmation' component={IncorrectEmailConfirmationPage} />
                         <Route exact path='/auth/login' component={LoginPageContainer} />
                         <Route
                             exact
-                            path='/auth/login-with-token/:sessionId/:token'
+                            path='/auth/login-with-token/:token'
                             component={LoginWithTokenComponent}
                         />
                         <Route exact path='/auth/password/reset' component={ResetPasswordPageComponent} />
@@ -386,7 +449,7 @@ class CVATApplication extends React.PureComponent<CVATAppProps & RouteComponentP
                         <Route exact path='/auth/email-confirmation' component={EmailConfirmationPage} />
 
                         <Redirect
-                            to={location.pathname.length > 1 ? `/auth/login/?next=${location.pathname}` : '/auth/login'}
+                            to={location.pathname.length > 1 ? `/auth/login?next=${location.pathname}` : '/auth/login'}
                         />
                     </Switch>
                 </GlobalErrorBoundary>

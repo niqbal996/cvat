@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -27,7 +27,8 @@ context('Create a task with set an issue tracker.', () => {
         cy.login();
         cy.imageGenerator(imagesFolder, imageFileName, width, height, color, posX, posY, labelName, imagesCount);
         cy.createZipArchive(directoryToArchive, archivePath);
-        cy.get('#cvat-create-task-button').click();
+        cy.get('.cvat-create-task-dropdown').click();
+        cy.get('.cvat-create-task-button').click();
     });
 
     after(() => {
@@ -43,7 +44,7 @@ context('Create a task with set an issue tracker.', () => {
             cy.contains('Advanced configuration').click();
             cy.get('#bugTracker').type(incorrectBugTrackerUrl);
             cy.contains('URL is not a valid URL').should('exist');
-            cy.get('.cvat-create-task-submit-section').click();
+            cy.contains('button', 'Submit & Continue').click();
             cy.get('.cvat-notification-create-task-fail').should('exist').and('be.visible');
             cy.closeNotification('.cvat-notification-create-task-fail');
         });
@@ -51,7 +52,7 @@ context('Create a task with set an issue tracker.', () => {
         it('Set correct issue tracker URL. The task created.', () => {
             cy.get('#bugTracker').clear().type(dummyBugTrackerUrl);
             cy.contains('URL is not a valid URL').should('not.exist');
-            cy.get('.cvat-create-task-submit-section').click();
+            cy.contains('button', 'Submit & Continue').click();
             cy.get('.cvat-notification-create-task-fail').should('not.exist');
             cy.get('.cvat-notification-create-task-success').should('exist').and('be.visible');
         });

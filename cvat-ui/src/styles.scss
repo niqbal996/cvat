@@ -1,4 +1,4 @@
-// Copyright (C) 2020 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -11,7 +11,21 @@ hr {
 }
 
 .cvat-spinner {
-    margin: 25% 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.cvat-spinner-container {
+    position: absolute;
+    background: $background-color-1;
+    opacity: 0.5;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    top: 0;
+    left: 0;
 }
 
 .cvat-not-found {
@@ -81,4 +95,14 @@ hr {
 
 .cvat-divider {
     margin: $grid-unit-size * 0.5 0;
+}
+
+.cvat-advanced-configuration-wrapper {
+    .ant-collapse-header {
+        align-items: center !important;
+    }
+
+    .cvat-title {
+        padding-top: 0;
+    }
 }

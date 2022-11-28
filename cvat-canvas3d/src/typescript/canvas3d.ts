@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -36,6 +36,7 @@ interface Canvas3d {
     fitCanvas(): void;
     fit(): void;
     group(groupData: GroupData): void;
+    destroy(): void;
 }
 
 class Canvas3dImpl implements Canvas3d {
@@ -104,8 +105,12 @@ class Canvas3dImpl implements Canvas3d {
     public fitCanvas(): void {
         this.model.fit();
     }
+
+    public destroy(): void {
+        this.model.destroy();
+    }
 }
 
 export {
-    Canvas3dImpl as Canvas3d, Canvas3dVersion, ViewType, MouseInteraction, CameraAction, ViewsDOM,
+    Canvas3dImpl as Canvas3d, Canvas3dVersion, ViewType, MouseInteraction, CameraAction, ViewsDOM, Mode as CanvasMode,
 };

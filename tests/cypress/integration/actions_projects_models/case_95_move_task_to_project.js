@@ -1,10 +1,13 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
 /// <reference types="cypress" />
 
-context('Move a task to a project.', () => {
+// Temporarily disabling the test for Firefox browser
+// Cypress issue: https://github.com/cypress-io/cypress/issues/18325
+
+context('Move a task to a project.', { browser: '!firefox' }, () => {
     const caseID = '95';
     const task = {
         name: `Case ${caseID}`,
@@ -18,7 +21,7 @@ context('Move a task to a project.', () => {
         name3d: `Case ${caseID} 3D`,
         label3d: 'Bus',
         attrName3d: 'Type',
-        attrValue3d: 'Сity bus',
+        attrValue3d: 'City bus',
     };
 
     const project = {
@@ -47,7 +50,9 @@ context('Move a task to a project.', () => {
         cy.imageGenerator(imagesFolder, imageFileName, width, height, color, posX, posY, task.name, imagesCount);
         cy.createZipArchive(directoryToArchive, archivePath);
         cy.goToTaskList();
-        cy.createAnnotationTask(task.nameSecond, task.labelSecond, task.attrNameSecons, task.attrValueSecond, archiveName);
+        cy.createAnnotationTask(
+            task.nameSecond, task.labelSecond, task.attrNameSecons, task.attrValueSecond, archiveName,
+        );
         cy.createAnnotationTask(task.name3d, task.label3d, task.attrName3d, task.attrValue3d, archiveName3d);
     });
 

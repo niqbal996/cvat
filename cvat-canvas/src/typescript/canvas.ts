@@ -1,4 +1,5 @@
-// Copyright (C) 2019-2020 Intel Corporation
+// Copyright (C) 2019-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -8,6 +9,7 @@ import {
     MergeData,
     SplitData,
     GroupData,
+    MasksEditData,
     InteractionData as _InteractionData,
     InteractionResult as _InteractionResult,
     CanvasModel,
@@ -29,7 +31,7 @@ const CanvasVersion = pjson.version;
 interface Canvas {
     html(): HTMLDivElement;
     setup(frameData: any, objectStates: any[], zLayer?: number): void;
-    setupIssueRegions(issueRegions: Record<number, number[]>): void;
+    setupIssueRegions(issueRegions: Record<number, { hidden: boolean; points: number[] }>): void;
     activate(clientID: number | null, attributeID?: number): void;
     rotate(rotationAngle: number): void;
     focus(clientID: number, padding?: number): void;
@@ -38,6 +40,7 @@ interface Canvas {
 
     interact(interactionData: InteractionData): void;
     draw(drawData: DrawData): void;
+    edit(editData: MasksEditData): void;
     group(groupData: GroupData): void;
     split(splitData: SplitData): void;
     merge(mergeData: MergeData): void;
@@ -53,6 +56,7 @@ interface Canvas {
     cancel(): void;
     configure(configuration: Configuration): void;
     isAbleToChangeFrame(): boolean;
+    destroy(): void;
 
     readonly geometry: Geometry;
 }
@@ -76,7 +80,7 @@ class CanvasImpl implements Canvas {
         this.model.setup(frameData, objectStates, zLayer);
     }
 
-    public setupIssueRegions(issueRegions: Record<number, number[]>): void {
+    public setupIssueRegions(issueRegions: Record<number, { hidden: boolean; points: number[] }>): void {
         this.model.setupIssueRegions(issueRegions);
     }
 
@@ -108,7 +112,7 @@ class CanvasImpl implements Canvas {
         this.model.rotate(rotationAngle);
     }
 
-    public focus(clientID: number, padding: number = 0): void {
+    public focus(clientID: number, padding = 0): void {
         this.model.focus(clientID, padding);
     }
 
@@ -126,6 +130,10 @@ class CanvasImpl implements Canvas {
 
     public draw(drawData: DrawData): void {
         this.model.draw(drawData);
+    }
+
+    public edit(editData: MasksEditData): void {
+        this.model.edit(editData);
     }
 
     public split(splitData: SplitData): void {
@@ -162,6 +170,10 @@ class CanvasImpl implements Canvas {
 
     public get geometry(): Geometry {
         return this.model.geometry;
+    }
+
+    public destroy(): void {
+        this.model.destroy();
     }
 }
 

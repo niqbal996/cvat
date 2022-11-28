@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2021 Intel Corporation
+# Copyright (C) 2020-2022 Intel Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -11,6 +11,8 @@ import sys
 import traceback
 import subprocess
 import os
+import urllib.parse
+
 from av import VideoFrame
 from PIL import Image
 
@@ -102,7 +104,32 @@ def md5_hash(frame):
 
 def parse_specific_attributes(specific_attributes):
     assert isinstance(specific_attributes, str), 'Specific attributes must be a string'
+    parsed_specific_attributes = urllib.parse.parse_qsl(specific_attributes)
     return {
-        item.split('=')[0].strip(): item.split('=')[1].strip()
-            for item in specific_attributes.split('&')
-    } if specific_attributes else dict()
+        key: value for (key, value) in parsed_specific_attributes
+    } if parsed_specific_attributes else dict()
+
+
+def process_failed_job(rq_job):
+    if rq_job.meta['tmp_file_descriptor']:
+        os.close(rq_job.meta['tmp_file_descriptor'])
+    if os.path.exists(rq_job.meta['tmp_file']):
+        os.remove(rq_job.meta['tmp_file'])
+    exc_info = str(rq_job.exc_info) or str(rq_job.dependency.exc_info)
+    if rq_job.dependency:
+        rq_job.dependency.delete()
+    rq_job.delete()
+
+    return exc_info
+
+def configure_dependent_job(queue, rq_id, rq_func, db_storage, filename, key):
+    rq_job_id_download_file = rq_id + f'?action=download_{filename}'
+    rq_job_download_file = queue.fetch_job(rq_job_id_download_file)
+    if not rq_job_download_file:
+        # note: boto3 resource isn't pickleable, so we can't use storage
+        rq_job_download_file = queue.enqueue_call(
+            func=rq_func,
+            args=(db_storage, filename, key),
+            job_id=rq_job_id_download_file
+        )
+    return rq_job_download_file

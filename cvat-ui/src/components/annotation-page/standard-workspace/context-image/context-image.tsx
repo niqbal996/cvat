@@ -1,15 +1,15 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import React, { useEffect, useState } from 'react';
-import { notification } from 'antd';
+import notification from 'antd/lib/notification';
 import { useDispatch, useSelector } from 'react-redux';
 import { QuestionCircleOutlined, ShrinkOutlined } from '@ant-design/icons';
 import Spin from 'antd/lib/spin';
 import Image from 'antd/lib/image';
 
-import { CombinedState } from 'reducers/interfaces';
+import { CombinedState } from 'reducers';
 import { hideShowContextImage, getContextImageAsync } from 'actions/annotation-actions';
 import CVATTooltip from 'components/common/cvat-tooltip';
 

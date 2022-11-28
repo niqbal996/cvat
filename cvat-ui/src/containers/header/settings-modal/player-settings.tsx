@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -11,15 +11,19 @@ import {
     switchResetZoom,
     switchRotateAll,
     changeCanvasBackgroundColor,
+    switchSmoothImage,
+    switchShowingDeletedFrames,
 } from 'actions/settings-actions';
-import { CombinedState, FrameSpeed } from 'reducers/interfaces';
+import { CombinedState, FrameSpeed } from 'reducers';
 
 interface StateToProps {
     frameStep: number;
     frameSpeed: FrameSpeed;
     resetZoom: boolean;
     rotateAll: boolean;
+    smoothImage: boolean;
     canvasBackgroundColor: string;
+    showDeletedFrames: boolean;
 }
 
 interface DispatchToProps {
@@ -28,6 +32,8 @@ interface DispatchToProps {
     onSwitchResetZoom(enabled: boolean): void;
     onSwitchRotateAll(rotateAll: boolean): void;
     onChangeCanvasBackgroundColor(color: string): void;
+    onSwitchSmoothImage(enabled: boolean): void;
+    onSwitchShowingDeletedFrames(enabled: boolean): void;
 }
 
 function mapStateToProps(state: CombinedState): StateToProps {
@@ -54,6 +60,12 @@ function mapDispatchToProps(dispatch: any): DispatchToProps {
         },
         onChangeCanvasBackgroundColor(color: string): void {
             dispatch(changeCanvasBackgroundColor(color));
+        },
+        onSwitchSmoothImage(enabled: boolean): void {
+            dispatch(switchSmoothImage(enabled));
+        },
+        onSwitchShowingDeletedFrames(enabled: boolean): void {
+            dispatch(switchShowingDeletedFrames(enabled));
         },
     };
 }

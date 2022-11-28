@@ -1,4 +1,5 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -10,10 +11,11 @@ import Radio, { RadioChangeEvent } from 'antd/lib/radio';
 import Text from 'antd/lib/typography/Text';
 import { RectDrawingMethod, CuboidDrawingMethod } from 'cvat-canvas-wrapper';
 
-import { DimensionType, ShapeType } from 'reducers/interfaces';
+import { DimensionType, ShapeType } from 'reducers';
 import { clamp } from 'utils/math';
 import LabelSelector from 'components/label-selector/label-selector';
 import CVATTooltip from 'components/common/cvat-tooltip';
+import { Label } from 'cvat-core-wrapper';
 
 interface Props {
     shapeType: ShapeType;
@@ -22,9 +24,9 @@ interface Props {
     rectDrawingMethod?: RectDrawingMethod;
     cuboidDrawingMethod?: CuboidDrawingMethod;
     numberOfPoints?: number;
-    selectedLabelID: number;
+    selectedLabelID: number | null;
     repeatShapeShortcut: string;
-    onChangeLabel(value: string): void;
+    onChangeLabel(value: Label | null): void;
     onChangePoints(value: number | undefined): void;
     onChangeRectDrawingMethod(event: RadioChangeEvent): void;
     onChangeCuboidDrawingMethod(event: RadioChangeEvent): void;
@@ -52,8 +54,7 @@ function DrawShapePopoverComponent(props: Props): JSX.Element {
         jobInstance,
     } = props;
 
-    const is2D = jobInstance.task.dimension === DimensionType.DIM_2D;
-
+    const is2D = jobInstance.dimension === DimensionType.DIM_2D;
     return (
         <div className='cvat-draw-shape-popover-content'>
             <Row justify='start'>
@@ -126,7 +127,7 @@ function DrawShapePopoverComponent(props: Props): JSX.Element {
                     </Row>
                 </>
             )}
-            {is2D && shapeType !== ShapeType.RECTANGLE && shapeType !== ShapeType.CUBOID && (
+            {is2D && [ShapeType.POLYGON, ShapeType.POLYLINE, ShapeType.POINTS].includes(shapeType) ? (
                 <Row justify='space-around' align='middle'>
                     <Col span={14}>
                         <Text className='cvat-text-color'> Number of points: </Text>
@@ -147,14 +148,14 @@ function DrawShapePopoverComponent(props: Props): JSX.Element {
                         />
                     </Col>
                 </Row>
-            )}
+            ) : null}
             <Row justify='space-around'>
                 <Col span={12}>
                     <CVATTooltip title={`Press ${repeatShapeShortcut} to draw again`}>
                         <Button onClick={onDrawShape}>Shape</Button>
                     </CVATTooltip>
                 </Col>
-                {is2D && (
+                {is2D && shapeType !== ShapeType.MASK && (
                     <Col span={12}>
                         <CVATTooltip title={`Press ${repeatShapeShortcut} to draw again`}>
                             <Button onClick={onDrawTrack}>Track</Button>

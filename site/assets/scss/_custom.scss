@@ -1,6 +1,41 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
+
+/* Code blocks */
+
+div.code-toolbar .toolbar {
+    padding-right: 0.6em;
+    opacity: 1 !important;
+}
+
+pre[class*="language-"] {
+    background: #f8f9fa !important;
+}
+
+details {
+    max-width: 80%;
+}
+
+@media (max-width: 991px) {
+    details {
+        max-width: 100% !important;
+    }
+}
+
+li > details {
+    max-width: 100%;
+}
+
+.code-toolbar {
+    max-width: 80%;
+}
+
+.highlight > .code-toolbar,
+details > summary > .code-toolbar,
+details > .code-toolbar {
+    max-width: 100%;
+}
 
 /* Increased left padding on the sidebar of documentation */
 
@@ -35,12 +70,6 @@
     padding-top: 2rem !important;
 }
 
-/* Icon color for temporary page */
-
-#temporary-page i {
-    color: lightgrey;
-}
-
 /* About page */
 
 .logo-2 {
@@ -51,7 +80,7 @@
     text-shadow: 0 0 3px rgb(27, 27, 27);
 }
 
-/* block location */
+/* Location block */
 
 .location {
     width: 70%;
@@ -128,7 +157,7 @@
     border: 4px white solid;
 }
 
-/* cover block on about page */
+/* Cover block on about page */
 
 #td-cover-block-0 {
     background-image: url("../images/background-about-page.jpg");

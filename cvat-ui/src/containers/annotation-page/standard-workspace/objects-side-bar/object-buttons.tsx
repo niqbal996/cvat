@@ -1,4 +1,4 @@
-// Copyright (C) 2020 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -6,10 +6,10 @@ import React from 'react';
 import { connect } from 'react-redux';
 
 import { LogType } from 'cvat-logger';
-import { Canvas } from 'cvat-canvas-wrapper';
+import isAbleToChangeFrame from 'utils/is-able-to-change-frame';
 import { ThunkDispatch } from 'utils/redux';
 import { updateAnnotationsAsync, changeFrameAsync } from 'actions/annotation-actions';
-import { CombinedState } from 'reducers/interfaces';
+import { CombinedState } from 'reducers';
 import ItemButtonsComponent from 'components/annotation-page/standard-workspace/objects-side-bar/object-item-buttons';
 
 interface OwnProps {
@@ -25,7 +25,6 @@ interface StateToProps {
     jobInstance: any;
     frameNumber: number;
     normalizedKeyMap: Record<string, string>;
-    canvasInstance: Canvas;
     outsideDisabled: boolean;
     hiddenDisabled: boolean;
     keyframeDisabled: boolean;
@@ -44,7 +43,6 @@ function mapStateToProps(state: CombinedState, own: OwnProps): StateToProps {
             player: {
                 frame: { number: frameNumber },
             },
-            canvas: { instance: canvasInstance },
         },
         shortcuts: { normalizedKeyMap },
     } = state;
@@ -52,14 +50,17 @@ function mapStateToProps(state: CombinedState, own: OwnProps): StateToProps {
     const {
         clientID, outsideDisabled, hiddenDisabled, keyframeDisabled,
     } = own;
-    const [objectState] = states.filter((_objectState): boolean => _objectState.clientID === clientID);
+    let [objectState] = states.filter((_objectState): boolean => _objectState.clientID === clientID);
+    if (!objectState) {
+        const elements = states.map((_objectState: any): any[] => _objectState.elements).flat();
+        [objectState] = elements.filter((_objectState): boolean => _objectState.clientID === clientID);
+    }
 
     return {
         objectState,
         normalizedKeyMap,
         frameNumber,
         jobInstance,
-        canvasInstance,
         outsideDisabled: typeof outsideDisabled === 'undefined' ? false : outsideDisabled,
         hiddenDisabled: typeof hiddenDisabled === 'undefined' ? false : hiddenDisabled,
         keyframeDisabled: typeof keyframeDisabled === 'undefined' ? false : keyframeDisabled,
@@ -217,8 +218,8 @@ class ItemButtonsWrapper extends React.PureComponent<StateToProps & DispatchToPr
     }
 
     private changeFrame(frame: number): void {
-        const { changeFrame, canvasInstance } = this.props;
-        if (canvasInstance.isAbleToChangeFrame()) {
+        const { changeFrame } = this.props;
+        if (isAbleToChangeFrame()) {
             changeFrame(frame);
         }
     }
@@ -246,6 +247,7 @@ class ItemButtonsWrapper extends React.PureComponent<StateToProps & DispatchToPr
         return (
             <ItemButtonsComponent
                 readonly={readonly}
+                parentID={objectState.parentID}
                 objectType={objectState.objectType}
                 shapeType={objectState.shapeType}
                 occluded={objectState.occluded}

@@ -1,8 +1,9 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import React from 'react';
+import { connect } from 'react-redux';
 import { Row, Col } from 'antd/lib/grid';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import Table from 'antd/lib/table';
@@ -11,38 +12,80 @@ import Spin from 'antd/lib/spin';
 import Text from 'antd/lib/typography/Text';
 
 import CVATTooltip from 'components/common/cvat-tooltip';
-import { DimensionType } from 'reducers/interfaces';
+import { CombinedState, DimensionType } from 'reducers';
+import { showStatistics } from 'actions/annotation-actions';
 
-interface Props {
+interface StateToProps {
+    visible: boolean;
     collecting: boolean;
     data: any;
-    visible: boolean;
-    assignee: string;
-    reviewer: string;
-    startFrame: number;
-    stopFrame: number;
-    bugTracker: string;
     jobStatus: string;
     savingJobStatus: boolean;
-    closeStatistics(): void;
-    jobInstance: any;
+    bugTracker: string | null;
+    startFrame: number;
+    stopFrame: number;
+    dimension: DimensionType;
+    assignee: any | null;
 }
 
-export default function StatisticsModalComponent(props: Props): JSX.Element {
+interface DispatchToProps {
+    closeStatistics(): void;
+}
+
+function mapStateToProps(state: CombinedState): StateToProps {
+    const {
+        annotation: {
+            statistics: { visible, collecting, data },
+            job: {
+                saving: savingJobStatus,
+                instance: {
+                    bugTracker,
+                    startFrame,
+                    stopFrame,
+                    assignee,
+                    dimension,
+                    status: jobStatus,
+                },
+            },
+        },
+    } = state;
+
+    return {
+        visible,
+        collecting,
+        data,
+        jobStatus,
+        savingJobStatus,
+        bugTracker,
+        startFrame,
+        stopFrame,
+        dimension,
+        assignee: assignee?.username || 'Nobody',
+    };
+}
+
+function mapDispatchToProps(dispatch: any): DispatchToProps {
+    return {
+        closeStatistics(): void {
+            dispatch(showStatistics(false));
+        },
+    };
+}
+
+function StatisticsModalComponent(props: StateToProps & DispatchToProps): JSX.Element {
     const {
         collecting,
         data,
         visible,
         assignee,
-        reviewer,
         startFrame,
         stopFrame,
         bugTracker,
         closeStatistics,
-        jobInstance,
+        dimension,
     } = props;
 
-    const is2D = jobInstance.task.dimension === DimensionType.DIM_2D;
+    const is2D = dimension === DimensionType.DIM_2D;
 
     const baseProps = {
         cancelButtonProps: { style: { display: 'none' } },
@@ -68,8 +111,11 @@ export default function StatisticsModalComponent(props: Props): JSX.Element {
         polygon: `${data.label[key].polygon.shape} / ${data.label[key].polygon.track}`,
         polyline: `${data.label[key].polyline.shape} / ${data.label[key].polyline.track}`,
         points: `${data.label[key].points.shape} / ${data.label[key].points.track}`,
+        ellipse: `${data.label[key].ellipse.shape} / ${data.label[key].ellipse.track}`,
         cuboid: `${data.label[key].cuboid.shape} / ${data.label[key].cuboid.track}`,
-        tags: data.label[key].tags,
+        skeleton: `${data.label[key].skeleton.shape} / ${data.label[key].skeleton.track}`,
+        mask: `${data.label[key].mask.shape}`,
+        tag: data.label[key].tag,
         manually: data.label[key].manually,
         interpolated: data.label[key].interpolated,
         total: data.label[key].total,
@@ -82,15 +128,18 @@ export default function StatisticsModalComponent(props: Props): JSX.Element {
         polygon: `${data.total.polygon.shape} / ${data.total.polygon.track}`,
         polyline: `${data.total.polyline.shape} / ${data.total.polyline.track}`,
         points: `${data.total.points.shape} / ${data.total.points.track}`,
+        ellipse: `${data.total.ellipse.shape} / ${data.total.ellipse.track}`,
         cuboid: `${data.total.cuboid.shape} / ${data.total.cuboid.track}`,
-        tags: data.total.tags,
+        skeleton: `${data.total.skeleton.shape} / ${data.total.skeleton.track}`,
+        mask: `${data.total.mask.shape}`,
+        tag: data.total.tag,
         manually: data.total.manually,
         interpolated: data.total.interpolated,
         total: data.total.total,
     });
 
     const makeShapesTracksTitle = (title: string): JSX.Element => (
-        <CVATTooltip title={is2D ? 'Shapes / Tracks' : 'Shapes'}>
+        <CVATTooltip title={is2D && !(title.toLowerCase() === 'mask') ? 'Shapes / Tracks' : 'Shapes'}>
             <Text strong style={{ marginRight: 5 }}>
                 {title}
             </Text>
@@ -102,52 +151,99 @@ export default function StatisticsModalComponent(props: Props): JSX.Element {
         {
             title: <Text strong> Label </Text>,
             dataIndex: 'label',
+            render: (text: string) => {
+                const sep = '{{cvat.skeleton.lbl.sep}}';
+                if (text.split(sep).length > 1) {
+                    const [label, part] = text.split(sep);
+                    return (
+                        <>
+                            <Text strong>{label}</Text>
+                            {' \u2B95 '}
+                            <Text strong>{part}</Text>
+                        </>
+                    );
+                }
+
+                return (<Text strong>{text}</Text>);
+            },
+            fixed: 'left',
             key: 'label',
+            width: 120,
         },
         {
             title: makeShapesTracksTitle('Rectangle'),
             dataIndex: 'rectangle',
             key: 'rectangle',
+            width: 100,
         },
         {
             title: makeShapesTracksTitle('Polygon'),
             dataIndex: 'polygon',
             key: 'polygon',
+            width: 100,
         },
         {
             title: makeShapesTracksTitle('Polyline'),
             dataIndex: 'polyline',
             key: 'polyline',
+            width: 100,
         },
         {
             title: makeShapesTracksTitle('Points'),
             dataIndex: 'points',
             key: 'points',
+            width: 100,
         },
         {
-            title: makeShapesTracksTitle('Cuboids'),
+            title: makeShapesTracksTitle('Ellipse'),
+            dataIndex: 'ellipse',
+            key: 'ellipse',
+            width: 100,
+        },
+        {
+            title: makeShapesTracksTitle('Cuboid'),
             dataIndex: 'cuboid',
             key: 'cuboid',
+            width: 100,
         },
         {
-            title: <Text strong> Tags </Text>,
-            dataIndex: 'tags',
-            key: 'tags',
+            title: makeShapesTracksTitle('Skeleton'),
+            dataIndex: 'skeleton',
+            key: 'skeleton',
+            width: 100,
+        },
+        {
+            title: makeShapesTracksTitle('Mask'),
+            dataIndex: 'mask',
+            key: 'mask',
+            width: 100,
+        },
+        {
+            title: <Text strong> Tag </Text>,
+            dataIndex: 'tag',
+            key: 'tag',
+            width: 100,
         },
         {
             title: <Text strong> Manually </Text>,
             dataIndex: 'manually',
             key: 'manually',
+            fixed: 'right',
+            width: 100,
         },
         {
             title: <Text strong> Interpolated </Text>,
             dataIndex: 'interpolated',
             key: 'interpolated',
+            fixed: 'right',
+            width: 100,
         },
         {
             title: <Text strong> Total </Text>,
             dataIndex: 'total',
             key: 'total',
+            fixed: 'right',
+            width: 100,
         },
     ];
 
@@ -186,12 +282,6 @@ export default function StatisticsModalComponent(props: Props): JSX.Element {
                     </Col>
                     <Col span={4}>
                         <Text strong className='cvat-text'>
-                            Reviewer
-                        </Text>
-                        <Text className='cvat-text'>{reviewer}</Text>
-                    </Col>
-                    <Col span={4}>
-                        <Text strong className='cvat-text'>
                             Start frame
                         </Text>
                         <Text className='cvat-text'>{startFrame}</Text>
@@ -223,7 +313,7 @@ export default function StatisticsModalComponent(props: Props): JSX.Element {
                     <Col span={24}>
                         <Text className='cvat-text'>Annotations statistics</Text>
                         <Table
-                            scroll={{ y: 400 }}
+                            scroll={{ x: 'max-content', y: 400 }}
                             bordered
                             pagination={false}
                             columns={is2D ? columns : columns3D}
@@ -235,3 +325,5 @@ export default function StatisticsModalComponent(props: Props): JSX.Element {
         </Modal>
     );
 }
+
+export default connect(mapStateToProps, mapDispatchToProps)(StatisticsModalComponent);

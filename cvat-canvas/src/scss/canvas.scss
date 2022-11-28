@@ -1,4 +1,5 @@
-// Copyright (C) 2020 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -8,6 +9,12 @@
 
 .cvat_canvas_shape {
     stroke-opacity: 1;
+}
+
+g.cvat_canvas_shape {
+    > circle {
+        fill-opacity: 1;
+    }
 }
 
 polyline.cvat_canvas_shape {
@@ -37,13 +44,17 @@ polyline.cvat_shape_drawing_opacity {
 
 .cvat_canvas_text {
     font-weight: bold;
-    font-size: 1.2em;
     fill: white;
     cursor: default;
     font-family: Calibri, Candara, Segoe, 'Segoe UI', Optima, Arial, sans-serif;
     text-shadow: 0 0 4px black;
     user-select: none;
     pointer-events: none;
+}
+
+.cvat_canvas_text_description {
+    fill: yellow;
+    font-style: oblique 40deg;
 }
 
 .cvat_canvas_crosshair {
@@ -61,6 +72,10 @@ polyline.cvat_shape_drawing_opacity {
     fill: darkmagenta;
 }
 
+image.cvat_canvas_shape_grouping {
+    visibility: hidden;
+}
+
 .cvat_canvas_shape_region_selection {
     @extend .cvat_shape_action_dasharray;
     @extend .cvat_shape_action_opacity;
@@ -70,7 +85,6 @@ polyline.cvat_shape_drawing_opacity {
 }
 
 .cvat_canvas_issue_region {
-    display: none;
     stroke-width: 0;
 }
 
@@ -90,6 +104,10 @@ polyline.cvat_canvas_shape_grouping {
     @extend .cvat_shape_action_opacity;
 
     fill: blue;
+
+    > circle[data-node-id] {
+        fill: blue;
+    }
 }
 
 polyline.cvat_canvas_shape_merging {
@@ -117,7 +135,6 @@ polyline.cvat_canvas_shape_splitting {
     @extend .cvat_shape_drawing_opacity;
 
     fill: white;
-    stroke: black;
 }
 
 .cvat_canvas_zoom_selection {
@@ -129,6 +146,29 @@ polyline.cvat_canvas_shape_splitting {
 
 .cvat_canvas_shape_occluded {
     stroke-dasharray: 5;
+}
+
+.cvat_canvas_shape_occluded_point {
+    stroke-dasharray: 1 !important;
+    stroke: white;
+}
+
+circle.cvat_canvas_shape_occluded {
+    @extend .cvat_canvas_shape_occluded_point;
+}
+
+g.cvat_canvas_shape_occluded {
+    > rect {
+        stroke-dasharray: 5;
+    }
+
+    > circle {
+        @extend .cvat_canvas_shape_occluded_point;
+    }
+}
+
+.svg_select_points_rot {
+    fill: white;
 }
 
 .cvat_canvas_shape .svg_select_points,
@@ -160,8 +200,9 @@ polyline.cvat_canvas_shape_splitting {
 
 .cvat_canvas_removable_interaction_point {
     cursor:
-        url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAxMCAxMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEgMUw5IDlNMSA5TDkgMSIgc3Ryb2tlPSJibGFjayIvPgo8L3N2Zz4K')
-        10 10,
+        url(
+            'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAxMCAxMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEgMUw5IDlNMSA5TDkgMSIgc3Ryb2tlPSJibGFjayIvPgo8L3N2Zz4K'
+        ) 10 10,
         auto;
 }
 
@@ -218,6 +259,27 @@ polyline.cvat_canvas_shape_splitting {
     }
 }
 
+.cvat_canvas_skeleton_wrapping_rect {
+    // wrapping rect must not apply transform attribute from selectize.js
+    // otherwise it rotated twice, because we apply the same rotation value to parent element (skeleton itself)
+    transform: none !important;
+}
+
+.cvat_canvas_pixelized {
+    image-rendering: optimizeSpeed;             /* Legal fallback */
+    image-rendering: -moz-crisp-edges;          /* Firefox        */
+    image-rendering: -o-crisp-edges;            /* Opera          */
+    image-rendering: -webkit-optimize-contrast; /* Safari         */
+    image-rendering: optimize-contrast;         /* CSS3 Proposed  */
+    image-rendering: crisp-edges;               /* CSS4 Proposed  */
+    image-rendering: pixelated;                 /* CSS4 Proposed  */
+    -ms-interpolation-mode: nearest-neighbor;   /* IE8+           */
+}
+
+.cvat_canvas_removed_image {
+    filter: saturate(0) brightness(1.2) contrast(0.75) !important;
+}
+
 #cvat_canvas_wrapper {
     width: calc(100% - 10px);
     height: calc(100% - 10px);
@@ -262,6 +324,8 @@ polyline.cvat_canvas_shape_splitting {
 }
 
 #cvat_canvas_bitmap {
+    @extend .cvat_canvas_pixelized;
+
     pointer-events: none;
     position: absolute;
     z-index: 4;
@@ -291,6 +355,11 @@ polyline.cvat_canvas_shape_splitting {
     outline: 10px solid black;
     width: 100%;
     height: 100%;
+}
+
+.cvat_masks_canvas_wrapper {
+    z-index: 3;
+    display: none;
 }
 
 #cvat_canvas_attachment_board {

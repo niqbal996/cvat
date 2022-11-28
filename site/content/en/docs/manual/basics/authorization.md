@@ -4,7 +4,8 @@ linkTitle: 'Authorization'
 weight: 1
 ---
 
-- First of all, you have to log in to CVAT tool.
+- First of all, you have to log in to CVAT tool. For authentication, you can use your username or email
+  you provided during registration.
 
   ![](/images/image001.jpg)
 
@@ -17,7 +18,9 @@ weight: 1
   [Django administration panel](http://localhost:8080/admin) to assign correct
   groups to the user. Please use the command below to create an admin account:
 
-  `docker exec -it cvat bash -ic 'python3 ~/manage.py createsuperuser'`
+  ```bash
+    docker exec -it cvat_server bash -ic 'python3 ~/manage.py createsuperuser'
+  ```
 
 - If you want to create a non-admin account, you can do that using the link below
   on the login page. Don't forget to modify permissions for the new user in the
@@ -25,6 +28,10 @@ weight: 1
   annotator, observer.
 
   ![](/images/image003.jpg)
+
+  A username generates from the email automatically. It can be edited if needed.
+
+  ![](/images/filling_email.gif)
 
 ### Administration panel
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -11,7 +11,7 @@ context('First part of a split track is visible', () => {
     const createRectangleTrack2Points = {
         points: 'By 2 Points',
         type: 'Track',
-        labelName: labelName,
+        labelName,
         firstX: 250,
         firstY: 350,
         secondX: 350,
@@ -34,7 +34,7 @@ context('First part of a split track is visible', () => {
         });
         it('Split track', () => {
             cy.get('body').type('{alt}m');
-            cy.get('#cvat_canvas_shape_1').trigger('mousemove', { which: 1 }).trigger('click', { which: 1 });
+            cy.get('#cvat_canvas_shape_1').trigger('mousemove', { button: 0 }).trigger('click', { button: 0 });
         });
         it('Go to previous frame', () => {
             cy.get('.cvat-player-previous-button').click();

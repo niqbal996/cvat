@@ -1,4 +1,5 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -7,7 +8,7 @@ import { ProjectsActionTypes } from 'actions/projects-actions';
 import { BoundariesActionTypes } from 'actions/boundaries-actions';
 import { AuthActionTypes } from 'actions/auth-actions';
 
-import { Project, ProjectsState } from './interfaces';
+import { Project, ProjectsState } from '.';
 
 const defaultState: ProjectsState = {
     initialized: false,
@@ -18,10 +19,17 @@ const defaultState: ProjectsState = {
         page: 1,
         id: null,
         search: null,
-        owner: null,
-        assignee: null,
-        name: null,
-        status: null,
+        filter: null,
+        sort: null,
+    },
+    tasksGettingQuery: {
+        page: 1,
+        id: null,
+        search: null,
+        filter: null,
+        sort: null,
+        projectId: null,
+        ordering: 'subset',
     },
     activities: {
         deletes: {},
@@ -40,6 +48,10 @@ export default (state: ProjectsState = defaultState, action: AnyAction): Project
                 gettingQuery: {
                     ...defaultState.gettingQuery,
                     ...action.payload.query,
+                },
+                tasksGettingQuery: {
+                    ...defaultState.tasksGettingQuery,
+                    ...action.payload.tasksQuery,
                 },
             };
         case ProjectsActionTypes.GET_PROJECTS:

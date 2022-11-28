@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -6,7 +6,7 @@ import * as SVG from 'svg.js';
 import consts from './consts';
 import Crosshair from './crosshair';
 import {
-    translateToSVG, PropType, stringifyPoints, translateToCanvas,
+    translateToSVG, PropType, stringifyPoints, translateToCanvas, expandChannels, imageDataToDataURL,
 } from './shared';
 
 import {
@@ -17,12 +17,12 @@ export interface InteractionHandler {
     transform(geometry: Geometry): void;
     interact(interactData: InteractionData): void;
     configurate(config: Configuration): void;
+    destroy(): void;
     cancel(): void;
 }
 
 export class InteractionHandlerImpl implements InteractionHandler {
     private onInteraction: (shapes: InteractionResult[] | null, shapesUpdated?: boolean, isDone?: boolean) => void;
-    private configuration: Configuration;
     private geometry: Geometry;
     private canvas: SVG.Container;
     private interactionData: InteractionData;
@@ -36,6 +36,8 @@ export class InteractionHandlerImpl implements InteractionHandler {
     private intermediateShape: PropType<InteractionData, 'intermediateShape'>;
     private drawnIntermediateShape: SVG.Shape;
     private thresholdWasModified: boolean;
+    private controlPointsSize: number;
+    private selectedShapeOpacity: number;
 
     private prepareResult(): InteractionResult[] {
         return this.interactionShapes.map(
@@ -110,7 +112,7 @@ export class InteractionHandlerImpl implements InteractionHandler {
                 if (!this.isWithinThreshold(cx, cy)) return;
 
                 this.currentInteractionShape = this.canvas
-                    .circle((consts.BASE_POINT_SIZE * 2) / this.geometry.scale)
+                    .circle((this.controlPointsSize * 2) / this.geometry.scale)
                     .center(cx, cy)
                     .fill('white')
                     .stroke(e.button === 0 ? 'green' : 'red')
@@ -136,7 +138,7 @@ export class InteractionHandlerImpl implements InteractionHandler {
                     self.addClass('cvat_canvas_removable_interaction_point');
                     self.attr({
                         'stroke-width': consts.POINTS_SELECTED_STROKE_WIDTH / this.geometry.scale,
-                        r: (consts.BASE_POINT_SIZE * 1.5) / this.geometry.scale,
+                        r: (this.controlPointsSize * 1.5) / this.geometry.scale,
                     });
 
                     self.on('mousedown', (_e: MouseEvent): void => {
@@ -161,7 +163,7 @@ export class InteractionHandlerImpl implements InteractionHandler {
                     self.removeClass('cvat_canvas_removable_interaction_point');
                     self.attr({
                         'stroke-width': consts.POINTS_STROKE_WIDTH / this.geometry.scale,
-                        r: consts.BASE_POINT_SIZE / this.geometry.scale,
+                        r: this.controlPointsSize / this.geometry.scale,
                     });
 
                     self.off('mousedown');
@@ -204,7 +206,7 @@ export class InteractionHandlerImpl implements InteractionHandler {
             .attr({
                 'stroke-width': consts.BASE_STROKE_WIDTH / this.geometry.scale,
             })
-            .fill({ opacity: this.configuration.creationOpacity, color: 'white' });
+            .fill({ opacity: this.selectedShapeOpacity, color: 'white' });
     }
 
     private initInteraction(): void {
@@ -299,9 +301,36 @@ export class InteractionHandlerImpl implements InteractionHandler {
                     'stroke-width': consts.BASE_STROKE_WIDTH / this.geometry.scale,
                     stroke: erroredShape ? 'red' : 'black',
                 })
-                .fill({ opacity: this.configuration.creationOpacity, color: 'white' })
+                .fill({ opacity: this.selectedShapeOpacity, color: 'white' })
                 .addClass('cvat_canvas_interact_intermediate_shape');
             this.selectize(true, this.drawnIntermediateShape, erroredShape);
+        } else if (shapeType === 'mask') {
+            const [left, top, right, bottom] = points.slice(-4);
+            const imageBitmap = expandChannels(255, 255, 255, points, 4);
+
+            const image = this.canvas.image().attr({
+                'color-rendering': 'optimizeQuality',
+                'shape-rendering': 'geometricprecision',
+                'pointer-events': 'none',
+                opacity: 0.5,
+            }).addClass('cvat_canvas_interact_intermediate_shape');
+            image.move(this.geometry.offset, this.geometry.offset);
+            this.drawnIntermediateShape = image;
+
+            imageDataToDataURL(
+                imageBitmap,
+                right - left + 1,
+                bottom - top + 1,
+                (dataURL: string) => new Promise((resolve, reject) => {
+                    image.loaded(() => {
+                        resolve();
+                    });
+                    image.error(() => {
+                        reject();
+                    });
+                    image.load(dataURL);
+                }),
+            );
         } else {
             throw new Error(
                 `Shape type "${shapeType}" was not implemented at interactionHandler::updateIntermediateShape`,
@@ -310,12 +339,13 @@ export class InteractionHandlerImpl implements InteractionHandler {
     }
 
     private selectize(value: boolean, shape: SVG.Element, erroredShape = false): void {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         const self = this;
 
         if (value) {
             (shape as any).selectize(value, {
                 deepSelect: true,
-                pointSize: consts.BASE_POINT_SIZE / self.geometry.scale,
+                pointSize: this.controlPointsSize / self.geometry.scale,
                 rotationPoint: false,
                 classPoints: 'cvat_canvas_interact_intermediate_shape_point',
                 pointType(cx: number, cy: number): SVG.Circle {
@@ -348,17 +378,38 @@ export class InteractionHandlerImpl implements InteractionHandler {
     private visualComponentsChanged(interactionData: InteractionData): boolean {
         const allowedKeys = ['enabled', 'crosshair', 'enableThreshold', 'onChangeToolsBlockerState'];
         if (Object.keys(interactionData).every((key: string): boolean => allowedKeys.includes(key))) {
-            if (this.interactionData.enableThreshold !== undefined && interactionData.enableThreshold !== undefined
-                && this.interactionData.enableThreshold !== interactionData.enableThreshold) {
+            if (this.interactionData.enableThreshold !== undefined && interactionData.enableThreshold !== undefined &&
+                this.interactionData.enableThreshold !== interactionData.enableThreshold) {
                 return true;
             }
-            if (this.interactionData.crosshair !== undefined && interactionData.crosshair !== undefined
-                && this.interactionData.crosshair !== interactionData.crosshair) {
+            if (this.interactionData.crosshair !== undefined && interactionData.crosshair !== undefined &&
+                this.interactionData.crosshair !== interactionData.crosshair) {
                 return true;
             }
         }
         return false;
     }
+
+    private onKeyUp = (e: KeyboardEvent): void => {
+        if (this.interactionData.enabled && e.keyCode === 17) {
+            if (this.interactionData.onChangeToolsBlockerState && !this.thresholdWasModified) {
+                this.interactionData.onChangeToolsBlockerState('keyup');
+            }
+            if (this.shouldRaiseEvent(false)) {
+                // 17 is ctrl
+                this.onInteraction(this.prepareResult(), true, false);
+            }
+        }
+    };
+
+    private onKeyDown = (e: KeyboardEvent): void => {
+        if (!e.repeat && this.interactionData.enabled && e.keyCode === 17) {
+            if (this.interactionData.onChangeToolsBlockerState && !this.thresholdWasModified) {
+                this.interactionData.onChangeToolsBlockerState('keydown');
+            }
+            this.thresholdWasModified = false;
+        }
+    };
 
     public constructor(
         onInteraction: (
@@ -376,7 +427,6 @@ export class InteractionHandlerImpl implements InteractionHandler {
             onInteraction(shapes, shapesUpdated, isDone, this.threshold ? this.thresholdRectSize / 2 : null);
         };
         this.canvas = canvas;
-        this.configuration = configuration;
         this.geometry = geometry;
         this.shapesWereUpdated = false;
         this.interactionShapes = [];
@@ -387,6 +437,8 @@ export class InteractionHandlerImpl implements InteractionHandler {
         this.thresholdRectSize = 300;
         this.intermediateShape = null;
         this.drawnIntermediateShape = null;
+        this.controlPointsSize = configuration.controlPointsSize;
+        this.selectedShapeOpacity = configuration.selectedShapeOpacity;
         this.cursorPosition = {
             x: 0,
             y: 0,
@@ -437,26 +489,8 @@ export class InteractionHandlerImpl implements InteractionHandler {
             }
         });
 
-        window.addEventListener('keyup', (e: KeyboardEvent): void => {
-            if (this.interactionData.enabled && e.keyCode === 17) {
-                if (this.interactionData.onChangeToolsBlockerState && !this.thresholdWasModified) {
-                    this.interactionData.onChangeToolsBlockerState('keyup');
-                }
-                if (this.shouldRaiseEvent(false)) {
-                    // 17 is ctrl
-                    this.onInteraction(this.prepareResult(), true, false);
-                }
-            }
-        });
-
-        window.addEventListener('keydown', (e: KeyboardEvent): void => {
-            if (this.interactionData.enabled && e.keyCode === 17) {
-                if (this.interactionData.onChangeToolsBlockerState && !this.thresholdWasModified) {
-                    this.interactionData.onChangeToolsBlockerState('keydown');
-                }
-                this.thresholdWasModified = false;
-            }
-        });
+        window.document.addEventListener('keyup', this.onKeyUp);
+        window.document.addEventListener('keydown', this.onKeyDown);
     }
 
     public transform(geometry: Geometry): void {
@@ -466,16 +500,16 @@ export class InteractionHandlerImpl implements InteractionHandler {
             this.crosshair.scale(this.geometry.scale);
         }
 
-        const shapesToBeScaled = this.currentInteractionShape
-            ? [...this.interactionShapes, this.currentInteractionShape]
-            : [...this.interactionShapes];
+        const shapesToBeScaled = this.currentInteractionShape ?
+            [...this.interactionShapes, this.currentInteractionShape] :
+            [...this.interactionShapes];
         for (const shape of shapesToBeScaled) {
             if (shape.type === 'circle') {
                 if (shape.hasClass('cvat_canvas_removable_interaction_point')) {
-                    (shape as SVG.Circle).radius((consts.BASE_POINT_SIZE * 1.5) / this.geometry.scale);
+                    (shape as SVG.Circle).radius((this.controlPointsSize * 1.5) / this.geometry.scale);
                     shape.attr('stroke-width', consts.POINTS_SELECTED_STROKE_WIDTH / this.geometry.scale);
                 } else {
-                    (shape as SVG.Circle).radius(consts.BASE_POINT_SIZE / this.geometry.scale);
+                    (shape as SVG.Circle).radius(this.controlPointsSize / this.geometry.scale);
                     shape.attr('stroke-width', consts.POINTS_STROKE_WIDTH / this.geometry.scale);
                 }
             } else {
@@ -485,7 +519,7 @@ export class InteractionHandlerImpl implements InteractionHandler {
 
         for (const element of window.document.getElementsByClassName('cvat_canvas_interact_intermediate_shape_point')) {
             element.setAttribute('stroke-width', `${consts.POINTS_STROKE_WIDTH / (2 * this.geometry.scale)}`);
-            element.setAttribute('r', `${consts.BASE_POINT_SIZE / this.geometry.scale}`);
+            element.setAttribute('r', `${this.controlPointsSize / this.geometry.scale}`);
         }
 
         if (this.drawnIntermediateShape) {
@@ -515,26 +549,33 @@ export class InteractionHandlerImpl implements InteractionHandler {
     }
 
     public configurate(configuration: Configuration): void {
-        this.configuration = configuration;
+        this.controlPointsSize = configuration.controlPointsSize;
+        this.selectedShapeOpacity = configuration.selectedShapeOpacity;
+
         if (this.drawnIntermediateShape) {
             this.drawnIntermediateShape.fill({
-                opacity: configuration.creationOpacity,
+                opacity: configuration.selectedShapeOpacity,
             });
         }
 
         // when interactRectangle
         if (this.currentInteractionShape && this.currentInteractionShape.type === 'rect') {
-            this.currentInteractionShape.fill({ opacity: configuration.creationOpacity });
+            this.currentInteractionShape.fill({ opacity: configuration.selectedShapeOpacity });
         }
 
         // when interactPoints with startwithbbox
         if (this.interactionShapes[0] && this.interactionShapes[0].type === 'rect') {
-            this.interactionShapes[0].fill({ opacity: configuration.creationOpacity });
+            this.interactionShapes[0].fill({ opacity: configuration.selectedShapeOpacity });
         }
     }
 
     public cancel(): void {
         this.release();
         this.onInteraction(null);
+    }
+
+    public destroy(): void {
+        window.document.removeEventListener('keyup', this.onKeyUp);
+        window.document.removeEventListener('keydown', this.onKeyDown);
     }
 }

@@ -1,11 +1,11 @@
-// Copyright (C) 2020 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import { BoundariesActions, BoundariesActionTypes } from 'actions/boundaries-actions';
 import { ModelsActionTypes, ModelsActions } from 'actions/models-actions';
 import { AuthActionTypes, AuthActions } from 'actions/auth-actions';
-import { ModelsState, Model } from './interfaces';
+import { ModelsState, Model } from '.';
 
 const defaultState: ModelsState = {
     initialized: false,
@@ -15,8 +15,8 @@ const defaultState: ModelsState = {
     detectors: [],
     trackers: [],
     reid: [],
-    visibleRunWindows: false,
-    activeRunTask: null,
+    modelRunnerIsVisible: false,
+    modelRunnerTask: null,
     inferences: {},
 };
 
@@ -50,15 +50,15 @@ export default function (state = defaultState, action: ModelsActions | AuthActio
         case ModelsActionTypes.SHOW_RUN_MODEL_DIALOG: {
             return {
                 ...state,
-                visibleRunWindows: true,
-                activeRunTask: action.payload.taskInstance,
+                modelRunnerIsVisible: true,
+                modelRunnerTask: action.payload.taskInstance,
             };
         }
         case ModelsActionTypes.CLOSE_RUN_MODEL_DIALOG: {
             return {
                 ...state,
-                visibleRunWindows: false,
-                activeRunTask: null,
+                modelRunnerIsVisible: false,
+                modelRunnerTask: null,
             };
         }
         case ModelsActionTypes.GET_INFERENCE_STATUS_SUCCESS: {

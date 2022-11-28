@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -46,19 +46,19 @@ import {
     ContextMenuType,
     Workspace,
     ActiveControl,
-} from 'reducers/interfaces';
+} from 'reducers';
 
 import { Canvas } from 'cvat-canvas-wrapper';
 import { Canvas3d } from 'cvat-canvas3d-wrapper';
 
 interface StateToProps {
     sidebarCollapsed: boolean;
-    canvasInstance: Canvas | Canvas3d;
+    canvasInstance: Canvas | Canvas3d | null;
     jobInstance: any;
     activatedStateID: number | null;
+    activatedElementID: number | null;
     activatedAttributeID: number | null;
     annotations: any[];
-    frameIssues: any[] | null;
     frameData: any;
     frameAngle: number;
     frameFetching: boolean;
@@ -80,8 +80,13 @@ interface StateToProps {
     contrastLevel: number;
     saturationLevel: number;
     resetZoom: boolean;
+    smoothImage: boolean;
     aamZoomMargin: number;
     showObjectsTextAlways: boolean;
+    textFontSize: number;
+    controlPointsSize: number;
+    textPosition: 'auto' | 'center';
+    textContent: string;
     showAllInterpolationTracks: boolean;
     workspace: Workspace;
     minZLayer: number;
@@ -92,6 +97,7 @@ interface StateToProps {
     switchableAutomaticBordering: boolean;
     keyMap: KeyMap;
     canvasBackgroundColor: string;
+    showTagsOnFrame: boolean;
 }
 
 interface DispatchToProps {
@@ -109,7 +115,7 @@ interface DispatchToProps {
     onMergeAnnotations(sessionInstance: any, frame: number, states: any[]): void;
     onGroupAnnotations(sessionInstance: any, frame: number, states: any[]): void;
     onSplitAnnotations(sessionInstance: any, frame: number, state: any): void;
-    onActivateObject: (activatedStateID: number | null) => void;
+    onActivateObject: (activatedStateID: number | null, activatedElementID: number | null) => void;
     onUpdateContextMenu(visible: boolean, left: number, top: number, type: ContextMenuType, pointID?: number): void;
     onAddZLayer(): void;
     onSwitchZLayer(cur: number): void;
@@ -138,6 +144,7 @@ function mapStateToProps(state: CombinedState): StateToProps {
             annotations: {
                 states: annotations,
                 activatedStateID,
+                activatedElementID,
                 activatedAttributeID,
                 zLayer: { cur: curZLayer, min: minZLayer, max: maxZLayer },
             },
@@ -155,19 +162,24 @@ function mapStateToProps(state: CombinedState): StateToProps {
                 contrastLevel,
                 saturationLevel,
                 resetZoom,
+                smoothImage,
             },
             workspace: {
                 aamZoomMargin,
                 showObjectsTextAlways,
                 showAllInterpolationTracks,
+                showTagsOnFrame,
                 automaticBordering,
                 intelligentPolygonCrop,
+                textFontSize,
+                controlPointsSize,
+                textPosition,
+                textContent,
             },
             shapes: {
                 opacity, colorBy, selectedOpacity, outlined, outlineColor, showBitmap, showProjections,
             },
         },
-        review: { frameIssues, issuesHidden },
         shortcuts: { keyMap },
     } = state;
 
@@ -175,13 +187,12 @@ function mapStateToProps(state: CombinedState): StateToProps {
         sidebarCollapsed,
         canvasInstance,
         jobInstance,
-        frameIssues:
-            issuesHidden || ![Workspace.REVIEW_WORKSPACE, Workspace.STANDARD].includes(workspace) ? null : frameIssues,
         frameData,
         frameAngle: frameAngles[frame - jobInstance.startFrame],
         frameFetching,
         frame,
         activatedStateID,
+        activatedElementID,
         activatedAttributeID,
         annotations,
         opacity: opacity / 100,
@@ -201,9 +212,15 @@ function mapStateToProps(state: CombinedState): StateToProps {
         contrastLevel: contrastLevel / 100,
         saturationLevel: saturationLevel / 100,
         resetZoom,
+        smoothImage,
         aamZoomMargin,
         showObjectsTextAlways,
+        textFontSize,
+        controlPointsSize,
+        textPosition,
+        textContent,
         showAllInterpolationTracks,
+        showTagsOnFrame,
         curZLayer,
         minZLayer,
         maxZLayer,
@@ -215,6 +232,7 @@ function mapStateToProps(state: CombinedState): StateToProps {
         switchableAutomaticBordering:
             activeControl === ActiveControl.DRAW_POLYGON ||
             activeControl === ActiveControl.DRAW_POLYLINE ||
+            activeControl === ActiveControl.DRAW_MASK ||
             activeControl === ActiveControl.EDIT,
     };
 }
@@ -263,12 +281,12 @@ function mapDispatchToProps(dispatch: any): DispatchToProps {
         onSplitAnnotations(sessionInstance: any, frame: number, state: any): void {
             dispatch(splitAnnotationsAsync(sessionInstance, frame, state));
         },
-        onActivateObject(activatedStateID: number | null): void {
+        onActivateObject(activatedStateID: number | null, activatedElementID: number | null = null): void {
             if (activatedStateID === null) {
                 dispatch(updateCanvasContextMenu(false, 0, 0));
             }
 
-            dispatch(activateObject(activatedStateID, null));
+            dispatch(activateObject(activatedStateID, activatedElementID, null));
         },
         onUpdateContextMenu(
             visible: boolean,

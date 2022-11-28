@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -543,9 +543,9 @@ export class Canvas3dViewImpl implements Canvas3dView, Listener {
         this.action.rotation.screenInit = { x: diffX, y: diffY };
         this.action.rotation.screenMove = { x: diffX, y: diffY };
         if (
-            this.model.data.selected
-            && !this.model.data.selected.perspective.userData.lock
-            && !this.model.data.selected.perspective.userData.hidden
+            this.model.data.selected &&
+            !this.model.data.selected.perspective.userData.lock &&
+            !this.model.data.selected.perspective.userData.hidden
         ) {
             this.action.scan = view;
             this.model.mode = Mode.EDIT;
@@ -698,8 +698,8 @@ export class Canvas3dViewImpl implements Canvas3dView, Listener {
         cuboid.setOpacity(opacity);
 
         if (
-            this.model.data.activeElement.clientID === clientID
-            && ![Mode.DRAG_CANVAS, Mode.GROUP].includes(this.mode)
+            this.model.data.activeElement.clientID === clientID &&
+            ![Mode.DRAG_CANVAS, Mode.GROUP].includes(this.mode)
         ) {
             cuboid.setOpacity(selectedOpacity);
             if (!object.lock) {
@@ -781,12 +781,43 @@ export class Canvas3dViewImpl implements Canvas3dView, Listener {
                 this.model.data.drawData.enabled = false;
             }
             this.views.perspective.renderer.dispose();
-            this.model.mode = Mode.BUSY;
+            if (!this.controller.imageIsDeleted) {
+                this.model.mode = Mode.BUSY;
+            }
             this.action.loading = true;
             const loader = new PCDLoader();
             const objectURL = URL.createObjectURL(model.data.image.imageData);
             this.clearScene();
-            loader.load(objectURL, this.addScene.bind(this));
+            if (this.controller.imageIsDeleted) {
+                this.render();
+                const [container] = window.document.getElementsByClassName('cvat-canvas-container');
+                const overlay = window.document.createElement('canvas');
+                overlay.classList.add('cvat_3d_canvas_deleted_overlay');
+                overlay.style.width = '100%';
+                overlay.style.height = '100%';
+                overlay.style.position = 'absolute';
+                overlay.style.top = '0px';
+                overlay.style.left = '0px';
+                container.appendChild(overlay);
+                const { clientWidth: width, clientHeight: height } = overlay;
+                overlay.width = width;
+                overlay.height = height;
+                const canvasContext = overlay.getContext('2d');
+                const fontSize = width / 10;
+                canvasContext.font = `bold ${fontSize}px serif`;
+                canvasContext.textAlign = 'center';
+                canvasContext.lineWidth = fontSize / 20;
+                canvasContext.strokeStyle = 'white';
+                canvasContext.strokeText('IMAGE REMOVED', width / 2, height / 2);
+                canvasContext.fillStyle = 'black';
+                canvasContext.fillText('IMAGE REMOVED', width / 2, height / 2);
+            } else {
+                loader.load(objectURL, this.addScene.bind(this));
+                const [overlay] = window.document.getElementsByClassName('cvat_3d_canvas_deleted_overlay');
+                if (overlay) {
+                    overlay.remove();
+                }
+            }
             URL.revokeObjectURL(objectURL);
             this.dispatchEvent(new CustomEvent('canvas.setup'));
         } else if (reason === UpdateReasons.SHAPE_ACTIVATED) {
@@ -964,12 +995,12 @@ export class Canvas3dViewImpl implements Canvas3dView, Listener {
         const sphereCenter = points.geometry.boundingSphere.center;
         const { radius } = points.geometry.boundingSphere;
         if (!this.views.perspective.camera) return;
-        const xRange = -radius / 2 < this.views.perspective.camera.position.x - sphereCenter.x
-            && radius / 2 > this.views.perspective.camera.position.x - sphereCenter.x;
-        const yRange = -radius / 2 < this.views.perspective.camera.position.y - sphereCenter.y
-            && radius / 2 > this.views.perspective.camera.position.y - sphereCenter.y;
-        const zRange = -radius / 2 < this.views.perspective.camera.position.z - sphereCenter.z
-            && radius / 2 > this.views.perspective.camera.position.z - sphereCenter.z;
+        const xRange = -radius / 2 < this.views.perspective.camera.position.x - sphereCenter.x &&
+            radius / 2 > this.views.perspective.camera.position.x - sphereCenter.x;
+        const yRange = -radius / 2 < this.views.perspective.camera.position.y - sphereCenter.y &&
+            radius / 2 > this.views.perspective.camera.position.y - sphereCenter.y;
+        const zRange = -radius / 2 < this.views.perspective.camera.position.z - sphereCenter.z &&
+            radius / 2 > this.views.perspective.camera.position.z - sphereCenter.z;
         let newX = 0;
         let newY = 0;
         let newZ = 0;
@@ -1085,10 +1116,10 @@ export class Canvas3dViewImpl implements Canvas3dView, Listener {
 
     private positionAllViews(x: number, y: number, z: number, animation: boolean): void {
         if (
-            this.views.perspective.controls
-            && this.views.top.controls
-            && this.views.side.controls
-            && this.views.front.controls
+            this.views.perspective.controls &&
+            this.views.top.controls &&
+            this.views.side.controls &&
+            this.views.front.controls
         ) {
             this.views.perspective.controls.setLookAt(x - 8, y - 8, z + 3, x, y, z, animation);
             this.views.top.camera.position.set(x, y, z + 8);
@@ -1266,8 +1297,8 @@ export class Canvas3dViewImpl implements Canvas3dView, Listener {
 
     private renderTranslateAction(view: ViewType, viewType: any): void {
         if (
-            this.action.translation.helper.x === this.views[view].rayCaster.mouseVector.x
-            && this.action.translation.helper.y === this.views[view].rayCaster.mouseVector.y
+            this.action.translation.helper.x === this.views[view].rayCaster.mouseVector.x &&
+            this.action.translation.helper.y === this.views[view].rayCaster.mouseVector.y
         ) {
             return;
         }
@@ -1332,8 +1363,8 @@ export class Canvas3dViewImpl implements Canvas3dView, Listener {
         }
 
         if (
-            this.action.resize.recentMouseVector.x === currentPosX
-            && this.action.resize.recentMouseVector.y === currentPosY
+            this.action.resize.recentMouseVector.x === currentPosX &&
+            this.action.resize.recentMouseVector.y === currentPosY
         ) {
             return;
         }
@@ -1736,15 +1767,15 @@ export class Canvas3dViewImpl implements Canvas3dView, Listener {
             y: canvas.offsetTop + canvas.offsetHeight / 2,
         };
         if (
-            this.action.rotation.screenInit.x === this.action.rotation.screenMove.x
-            && this.action.rotation.screenInit.y === this.action.rotation.screenMove.y
+            this.action.rotation.screenInit.x === this.action.rotation.screenMove.x &&
+            this.action.rotation.screenInit.y === this.action.rotation.screenMove.y
         ) {
             return;
         }
 
         if (
-            this.action.rotation.recentMouseVector.x === this.views[view].rayCaster.mouseVector.x
-            && this.action.rotation.recentMouseVector.y === this.views[view].rayCaster.mouseVector.y
+            this.action.rotation.recentMouseVector.x === this.views[view].rayCaster.mouseVector.x &&
+            this.action.rotation.recentMouseVector.y === this.views[view].rayCaster.mouseVector.y
         ) {
             return;
         }

@@ -1,4 +1,5 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -10,9 +11,9 @@ context('When clicking on the Logout button, get the user session closed.', () =
     const issueId = '1810';
     let taskId;
 
-    function login(userName, password) {
-        cy.get('[placeholder="Username"]').clear().type(userName);
-        cy.get('[placeholder="Password"]').clear().type(password);
+    function login(credential, password) {
+        cy.get('#credential').clear().type(credential);
+        cy.get('#password').clear().type(password);
         cy.get('[type="submit"]').click();
     }
 
@@ -22,7 +23,6 @@ context('When clicking on the Logout button, get the user session closed.', () =
 
     describe(`Testing issue "${issueId}"`, () => {
         it('Login', () => {
-            cy.closeModalUnsupportedPlatform();
             cy.login();
         });
 
@@ -42,12 +42,12 @@ context('When clicking on the Logout button, get the user session closed.', () =
         it('Logout and login to task via GUI', () => {
             // logout from task
             cy.get('.cvat-right-header').within(() => {
-                cy.get('.cvat-header-menu-dropdown')
+                cy.get('.cvat-header-menu-user-dropdown')
                     .should('have.text', Cypress.env('user'))
                     .trigger('mouseover', { which: 1 });
             });
             cy.get('span[aria-label="logout"]').click();
-            cy.url().should('include', `/auth/login/?next=/tasks/${taskId}`);
+            cy.url().should('include', `/auth/login?next=/tasks/${taskId}`);
             // login to task
             login(Cypress.env('user'), Cypress.env('password'));
             cy.url().should('include', `/tasks/${taskId}`).and('not.include', '/auth/login');
@@ -59,19 +59,23 @@ context('When clicking on the Logout button, get the user session closed.', () =
             // get token and login to task
             cy.request({
                 method: 'POST',
-                url: '/api/v1/auth/login',
+                url: '/api/auth/login',
                 body: {
                     username: Cypress.env('user'),
                     email: Cypress.env('email'),
                     password: Cypress.env('password'),
                 },
             }).then(async (response) => {
-                response = await response['headers']['set-cookie'];
-                const csrfToken = response[0].match(/csrftoken=\w+/)[0].replace('csrftoken=', '');
-                const sessionId = response[1].match(/sessionid=\w+/)[0].replace('sessionid=', '');
-                cy.visit(`/login-with-token/${sessionId}/${csrfToken}?next=/tasks/${taskId}`);
+                const token = response.body.key;
+                cy.visit(`/auth/login-with-token/${token}?next=/tasks/${taskId}`);
                 cy.contains('.cvat-task-details-task-name', `${taskName}`).should('be.visible');
             });
+        });
+
+        it('Login via email', () => {
+            cy.logout();
+            login(Cypress.env('email'), Cypress.env('password'));
+            cy.url().should('contain', '/tasks');
         });
 
         it('Incorrect user and correct password', () => {

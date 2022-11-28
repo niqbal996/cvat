@@ -1,4 +1,5 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -17,12 +18,13 @@ import { BoundariesActionTypes } from 'actions/boundaries-actions';
 import { UserAgreementsActionTypes } from 'actions/useragreements-actions';
 import { ReviewActionTypes } from 'actions/review-actions';
 import { ExportActionTypes } from 'actions/export-actions';
+import { ImportActionTypes } from 'actions/import-actions';
 import { CloudStorageActionTypes } from 'actions/cloud-storage-actions';
+import { OrganizationActionsTypes } from 'actions/organization-actions';
+import { JobsActionTypes } from 'actions/jobs-actions';
+import { WebhooksActionsTypes } from 'actions/webhooks-actions';
 
-import getCore from 'cvat-core-wrapper';
-import { NotificationsState } from './interfaces';
-
-const core = getCore();
+import { NotificationsState } from '.';
 
 const defaultState: NotificationsState = {
     errors: {
@@ -41,6 +43,8 @@ const defaultState: NotificationsState = {
             updating: null,
             deleting: null,
             creating: null,
+            restoring: null,
+            backuping: null,
         },
         tasks: {
             fetching: null,
@@ -53,6 +57,10 @@ const defaultState: NotificationsState = {
             exporting: null,
             importing: null,
             moving: null,
+        },
+        jobs: {
+            updating: null,
+            fetching: null,
         },
         formats: {
             fetching: null,
@@ -95,6 +103,8 @@ const defaultState: NotificationsState = {
             redo: null,
             search: null,
             searchEmptyFrame: null,
+            deleteFrame: null,
+            restoreFrame: null,
             savingLogs: null,
         },
         boundaries: {
@@ -106,17 +116,44 @@ const defaultState: NotificationsState = {
         review: {
             commentingIssue: null,
             finishingIssue: null,
-            initialization: null,
             reopeningIssue: null,
             resolvingIssue: null,
             submittingReview: null,
+            deletingIssue: null,
         },
         predictor: {
             prediction: null,
         },
+        exporting: {
+            dataset: null,
+            annotation: null,
+            backup: null,
+        },
+        importing: {
+            dataset: null,
+            annotation: null,
+            backup: null,
+        },
         cloudStorages: {
             creating: null,
             fetching: null,
+            updating: null,
+            deleting: null,
+        },
+        organizations: {
+            fetching: null,
+            creating: null,
+            updating: null,
+            activation: null,
+            deleting: null,
+            leaving: null,
+            inviting: null,
+            updatingMembership: null,
+            removingMembership: null,
+        },
+        webhooks: {
+            fetching: null,
+            creating: null,
             updating: null,
             deleting: null,
         },
@@ -135,6 +172,19 @@ const defaultState: NotificationsState = {
             registerDone: '',
             requestPasswordResetDone: '',
             resetPasswordDone: '',
+        },
+        projects: {
+            restoringDone: '',
+        },
+        exporting: {
+            dataset: '',
+            annotation: '',
+            backup: '',
+        },
+        importing: {
+            dataset: '',
+            annotation: '',
+            backup: '',
         },
     },
 };
@@ -320,19 +370,144 @@ export default function (state = defaultState, action: AnyAction): Notifications
             };
         }
         case ExportActionTypes.EXPORT_DATASET_FAILED: {
-            const instanceID = action.payload.instance.id;
-            const instanceType = action.payload.instance instanceof core.classes.Project ? 'project' : 'task';
+            const { instance, instanceType } = action.payload;
             return {
                 ...state,
                 errors: {
                     ...state.errors,
-                    tasks: {
-                        ...state.errors.tasks,
-                        exportingAsDataset: {
+                    exporting: {
+                        ...state.errors.exporting,
+                        dataset: {
                             message:
                                 'Could not export dataset for the ' +
-                                `<a href="/${instanceType}s/${instanceID}" target="_blank">` +
-                                `${instanceType} ${instanceID}</a>`,
+                                `<a href="/${instanceType}s/${instance.id}" target="_blank">` +
+                                `${instanceType} ${instance.id}</a>`,
+                            reason: action.payload.error.toString(),
+                        },
+                    },
+                },
+            };
+        }
+        case ExportActionTypes.EXPORT_DATASET_SUCCESS: {
+            const {
+                instance, instanceType, isLocal, resource,
+            } = action.payload;
+            const auxiliaryVerb = resource === 'Dataset' ? 'has' : 'have';
+            return {
+                ...state,
+                messages: {
+                    ...state.messages,
+                    exporting: {
+                        ...state.messages.exporting,
+                        dataset:
+                            `${resource} for ${instanceType} ${instance.id} ` +
+                            `${auxiliaryVerb} been ${(isLocal) ? 'downloaded' : 'uploaded'} ` +
+                            `${(isLocal) ? 'locally' : 'to cloud storage'}`,
+                    },
+                },
+            };
+        }
+        case ExportActionTypes.EXPORT_BACKUP_FAILED: {
+            const { instance, instanceType } = action.payload;
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    exporting: {
+                        ...state.errors.exporting,
+                        backup: {
+                            message:
+                                `Could not export the ${instanceType} №${instance.id}`,
+                            reason: action.payload.error.toString(),
+                        },
+                    },
+                },
+            };
+        }
+        case ExportActionTypes.EXPORT_BACKUP_SUCCESS: {
+            const { instance, instanceType, isLocal } = action.payload;
+            return {
+                ...state,
+                messages: {
+                    ...state.messages,
+                    exporting: {
+                        ...state.messages.exporting,
+                        backup:
+                            `Backup for the ${instanceType} №${instance.id} ` +
+                            `has been ${(isLocal) ? 'downloaded' : 'uploaded'} ` +
+                            `${(isLocal) ? 'locally' : 'to cloud storage'}`,
+                    },
+                },
+            };
+        }
+        case ImportActionTypes.IMPORT_DATASET_SUCCESS: {
+            const { instance, resource } = action.payload;
+            const message = resource === 'annotation' ?
+                'Annotations have been loaded to the ' +
+                `<a href="/tasks/${instance.taskId || instance.id}" target="_blank">` +
+                `task ${instance.taskId || instance.id}</a>` :
+                'Dataset has been imported to the ' +
+                `<a href="/projects/${instance.id}" target="_blank">project ${instance.id}</a>`;
+            return {
+                ...state,
+                messages: {
+                    ...state.messages,
+                    importing: {
+                        ...state.messages.importing,
+                        [resource]: message,
+                    },
+                },
+            };
+        }
+        case ImportActionTypes.IMPORT_DATASET_FAILED: {
+            const { instance, resource } = action.payload;
+            const message = resource === 'annotation' ? 'Could not upload annotation for the ' +
+                `<a href="/tasks/${instance.taskId || instance.id}" target="_blank">` :
+                'Could not import dataset to the ' +
+                `<a href="/projects/${instance.id}" target="_blank">` +
+                `project ${instance.id}</a>`;
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    importing: {
+                        ...state.errors.importing,
+                        dataset: {
+                            message,
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-' +
+                                `${resource === 'annotation' ? 'load-annotation' : 'import-dataset'}-failed`,
+                        },
+                    },
+                },
+            };
+        }
+        case ImportActionTypes.IMPORT_BACKUP_SUCCESS: {
+            const { instanceId, instanceType } = action.payload;
+            return {
+                ...state,
+                messages: {
+                    ...state.messages,
+                    importing: {
+                        ...state.messages.importing,
+                        backup:
+                            `The ${instanceType} has been restored succesfully.
+                            Click <a href="/${instanceType}s/${instanceId}">here</a> to open`,
+                    },
+                },
+            };
+        }
+        case ImportActionTypes.IMPORT_BACKUP_FAILED: {
+            const { instanceType } = action.payload;
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    importing: {
+                        ...state.errors.importing,
+                        backup: {
+                            message:
+                                `Could not restore ${instanceType} backup.`,
                             reason: action.payload.error.toString(),
                         },
                     },
@@ -350,40 +525,6 @@ export default function (state = defaultState, action: AnyAction): Notifications
                             message: 'Could not fetch tasks',
                             reason: action.payload.error.toString(),
                         },
-                    },
-                },
-            };
-        }
-        case TasksActionTypes.LOAD_ANNOTATIONS_FAILED: {
-            const taskID = action.payload.task.id;
-            return {
-                ...state,
-                errors: {
-                    ...state.errors,
-                    tasks: {
-                        ...state.errors.tasks,
-                        loading: {
-                            message:
-                                'Could not upload annotation for the ' +
-                                `<a href="/tasks/${taskID}" target="_blank">task ${taskID}</a>`,
-                            reason: action.payload.error.toString(),
-                            className: 'cvat-notification-notice-load-annotation-failed',
-                        },
-                    },
-                },
-            };
-        }
-        case TasksActionTypes.LOAD_ANNOTATIONS_SUCCESS: {
-            const taskID = action.payload.task.id;
-            return {
-                ...state,
-                messages: {
-                    ...state.messages,
-                    tasks: {
-                        ...state.messages.tasks,
-                        loadingDone:
-                            'Annotations have been loaded to the ' +
-                            `<a href="/tasks/${taskID}" target="_blank">task ${taskID}</a>`,
                     },
                 },
             };
@@ -440,45 +581,19 @@ export default function (state = defaultState, action: AnyAction): Notifications
                 },
             };
         }
-        case TasksActionTypes.EXPORT_TASK_FAILED: {
+        case TasksActionTypes.UPDATE_JOB_FAILED: {
+            const jobID = action.payload.jobInstance.id;
             return {
                 ...state,
                 errors: {
                     ...state.errors,
-                    tasks: {
-                        ...state.errors.tasks,
-                        exporting: {
-                            message: 'Could not export the task',
+                    jobs: {
+                        ...state.errors.jobs,
+                        updating: {
+                            message: `Could not update job with ID #${jobID}`,
                             reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-update-job-failed',
                         },
-                    },
-                },
-            };
-        }
-        case TasksActionTypes.IMPORT_TASK_FAILED: {
-            return {
-                ...state,
-                errors: {
-                    ...state.errors,
-                    tasks: {
-                        ...state.errors.tasks,
-                        importing: {
-                            message: 'Could not import the task',
-                            reason: action.payload.error.toString(),
-                        },
-                    },
-                },
-            };
-        }
-        case TasksActionTypes.IMPORT_TASK_SUCCESS: {
-            const taskID = action.payload.task.id;
-            return {
-                ...state,
-                messages: {
-                    ...state.messages,
-                    tasks: {
-                        ...state.messages.tasks,
-                        importingDone: `Task has been imported succesfully <a href="/tasks/${taskID}">Open task</a>`,
                     },
                 },
             };
@@ -619,6 +734,10 @@ export default function (state = defaultState, action: AnyAction): Notifications
             };
         }
         case ModelsActionTypes.FETCH_META_FAILED: {
+            if (action.payload.error.toString().includes('status code 403')) {
+                return state;
+            }
+
             return {
                 ...state,
                 errors: {
@@ -891,7 +1010,7 @@ export default function (state = defaultState, action: AnyAction): Notifications
 
             const {
                 id: jobID,
-                task: { id: taskID },
+                taskId: taskID,
             } = job;
 
             return {
@@ -1046,21 +1165,6 @@ export default function (state = defaultState, action: AnyAction): Notifications
                 },
             };
         }
-        case ReviewActionTypes.INITIALIZE_REVIEW_FAILED: {
-            return {
-                ...state,
-                errors: {
-                    ...state.errors,
-                    review: {
-                        ...state.errors.review,
-                        initialization: {
-                            message: 'Could not initialize review session',
-                            reason: action.payload.error.toString(),
-                        },
-                    },
-                },
-            };
-        }
         case ReviewActionTypes.FINISH_ISSUE_FAILED: {
             return {
                 ...state,
@@ -1129,7 +1233,22 @@ export default function (state = defaultState, action: AnyAction): Notifications
                     review: {
                         ...state.errors.review,
                         submittingReview: {
-                            message: 'Could not submit review session to the server',
+                            message: `Could not submit review for the job ${action.payload.jobId}`,
+                            reason: action.payload.error.toString(),
+                        },
+                    },
+                },
+            };
+        }
+        case ReviewActionTypes.REMOVE_ISSUE_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    review: {
+                        ...state.errors.review,
+                        deletingIssue: {
+                            message: 'Could not remove issue from the server',
                             reason: action.payload.error.toString(),
                         },
                     },
@@ -1162,6 +1281,7 @@ export default function (state = defaultState, action: AnyAction): Notifications
                         jobFetching: {
                             message: 'Could not fetch frame data from the server',
                             reason: action.payload.error,
+                            className: 'cvat-notification-notice-fetch-frame-data-from-the-server-failed',
                         },
                     },
                 },
@@ -1176,6 +1296,36 @@ export default function (state = defaultState, action: AnyAction): Notifications
                         ...state.errors.predictor,
                         prediction: {
                             message: 'Could not fetch prediction data',
+                            reason: action.payload.error,
+                        },
+                    },
+                },
+            };
+        }
+        case AnnotationActionTypes.DELETE_FRAME_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    annotation: {
+                        ...state.errors.annotation,
+                        deleteFrame: {
+                            message: 'Could not delete frame',
+                            reason: action.payload.error,
+                        },
+                    },
+                },
+            };
+        }
+        case AnnotationActionTypes.RESTORE_FRAME_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    annotation: {
+                        ...state.errors.annotation,
+                        restoreFrame: {
+                            message: 'Could not restore frame',
                             reason: action.payload.error,
                         },
                     },
@@ -1240,9 +1390,7 @@ export default function (state = defaultState, action: AnyAction): Notifications
                         ...state.errors.cloudStorages,
                         deleting: {
                             message:
-                                'Could not delete ' +
-                                `<a href="/cloudstorages/${cloudStorageID}" target="_blank">
-                                cloud storage ${cloudStorageID}</a>`,
+                                `Could not delete cloud storage ${cloudStorageID}`,
                             reason: action.payload.error.toString(),
                             className: 'cvat-notification-notice-delete-cloud-storage-failed',
                         },
@@ -1297,6 +1445,248 @@ export default function (state = defaultState, action: AnyAction): Notifications
                             message: `Could not fetch preview for cloud storage #${cloudStorageID}`,
                             reason: action.payload.error.toString(),
                             className: 'cvat-notification-notice-fetch-cloud-storage-preview-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.GET_ORGANIZATIONS_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        fetching: {
+                            message: 'Could not fetch organizations list',
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-fetch-organizations-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.CREATE_ORGANIZATION_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        creating: {
+                            message: `Could not create organization ${action.payload.slug}`,
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-create-organization-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.UPDATE_ORGANIZATION_FAILED: {
+            const { slug } = action.payload;
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        updating: {
+                            message: `Could not update organization "${slug}"`,
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-update-organization-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.ACTIVATE_ORGANIZATION_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        activation: {
+                            message: `Could not activate organization ${action.payload.slug || ''}`,
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-activate-organization-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.REMOVE_ORGANIZATION_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        deleting: {
+                            message: `Could not remove organization ${action.payload.slug}`,
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-remove-organization-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.INVITE_ORGANIZATION_MEMBERS_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        inviting: {
+                            message: 'Could not invite organization members',
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-invite-organization-members-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.INVITE_ORGANIZATION_MEMBER_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        inviting: {
+                            message: `Could not invite this member "${action.payload.email}" to the organization`,
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-invite-organization-member-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.LEAVE_ORGANIZATION_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        leaving: {
+                            message: 'Could not leave the organization',
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-leave-organization-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.REMOVE_ORGANIZATION_MEMBER_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        removingMembership: {
+                            message: `Could not remove member "${action.payload.username}" from the organization`,
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-remove-organization-member-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case OrganizationActionsTypes.UPDATE_ORGANIZATION_MEMBER_FAILED: {
+            const { role, username } = action.payload;
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    organizations: {
+                        ...state.errors.organizations,
+                        updatingMembership: {
+                            message: `Could not assign role "${role}" to the user "${username}"`,
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-update-organization-membership-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case JobsActionTypes.GET_JOBS_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    jobs: {
+                        ...state.errors.jobs,
+                        fetching: {
+                            message: 'Could not fetch a list of jobs',
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-update-organization-membership-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case WebhooksActionsTypes.GET_WEBHOOKS_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    webhooks: {
+                        ...state.errors.webhooks,
+                        fetching: {
+                            message: 'Could not fetch a list of webhooks',
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-get-webhooks-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case WebhooksActionsTypes.CREATE_WEBHOOK_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    webhooks: {
+                        ...state.errors.webhooks,
+                        creating: {
+                            message: 'Could not create webhook',
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-create-webhook-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case WebhooksActionsTypes.UPDATE_WEBHOOK_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    webhooks: {
+                        ...state.errors.webhooks,
+                        updating: {
+                            message: 'Could not update webhook',
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-update-webhook-failed',
+                        },
+                    },
+                },
+            };
+        }
+        case WebhooksActionsTypes.DELETE_WEBHOOK_FAILED: {
+            return {
+                ...state,
+                errors: {
+                    ...state.errors,
+                    webhooks: {
+                        ...state.errors.webhooks,
+                        deleting: {
+                            message: 'Could not delete webhook',
+                            reason: action.payload.error.toString(),
+                            className: 'cvat-notification-notice-delete-webhook-failed',
                         },
                     },
                 },

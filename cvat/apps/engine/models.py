@@ -1,18 +1,24 @@
-# Copyright (C) 2018-2019 Intel Corporation
+# Copyright (C) 2018-2022 Intel Corporation
+# Copyright (C) 2022 CVAT.ai Corporation
 #
 # SPDX-License-Identifier: MIT
 
 import os
 import re
+import shutil
 from enum import Enum
+from typing import Optional
 
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.files.storage import FileSystemStorage
 from django.db import models
-from django.utils.translation import gettext_lazy as _
-
+from django.db.models.fields import FloatField
+from django.core.serializers.json import DjangoJSONEncoder
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from cvat.apps.engine.utils import parse_specific_attributes
+from cvat.apps.organizations.models import Organization
 
 class SafeCharField(models.CharField):
     def get_prep_value(self, value):
@@ -34,9 +40,63 @@ class DimensionType(str, Enum):
         return self.value
 
 class StatusChoice(str, Enum):
+    """Deprecated. Use StageChoice and StateChoice instead"""
+
     ANNOTATION = 'annotation'
     VALIDATION = 'validation'
     COMPLETED = 'completed'
+
+    @classmethod
+    def choices(cls):
+        return tuple((x.value, x.name) for x in cls)
+
+    @classmethod
+    def list(cls):
+        return list(map(lambda x: x.value, cls))
+
+    def __str__(self):
+        return self.value
+
+class LabelType(str, Enum):
+    BBOX = 'bbox'
+    ELLIPSE = 'ellipse'
+    POLYGON = 'polygon'
+    POLYLINE = 'polyline'
+    POINTS = 'points'
+    CUBOID = 'cuboid'
+    CUBOID_3D = 'cuboid_3d'
+    SKELETON = 'skeleton'
+    TAG = 'tag'
+    ANY = 'any'
+
+    @classmethod
+    def choices(cls):
+        return tuple((x.value, x.name) for x in cls)
+
+    @classmethod
+    def list(cls):
+        return list(map(lambda x: x.value, cls))
+
+    def __str__(self):
+        return self.value
+
+class StageChoice(str, Enum):
+    ANNOTATION = 'annotation'
+    VALIDATION = 'validation'
+    ACCEPTANCE = 'acceptance'
+
+    @classmethod
+    def choices(cls):
+        return tuple((x.value, x.name) for x in cls)
+
+    def __str__(self):
+        return self.value
+
+class StateChoice(str, Enum):
+    NEW = 'new'
+    IN_PROGRESS = 'in progress'
+    COMPLETED = 'completed'
+    REJECTED = 'rejected'
 
     @classmethod
     def choices(cls):
@@ -80,6 +140,54 @@ class StorageChoice(str, Enum):
     def __str__(self):
         return self.value
 
+class SortingMethod(str, Enum):
+    LEXICOGRAPHICAL = 'lexicographical'
+    NATURAL = 'natural'
+    PREDEFINED = 'predefined'
+    RANDOM = 'random'
+
+    @classmethod
+    def choices(cls):
+        return tuple((x.value, x.name) for x in cls)
+
+    def __str__(self):
+        return self.value
+
+class AbstractArrayField(models.TextField):
+    separator = ","
+    converter = lambda x: x
+
+    def __init__(self, *args, store_sorted:Optional[bool]=False, unique_values:Optional[bool]=False, **kwargs):
+        self._store_sorted = store_sorted
+        self._unique_values = unique_values
+        super().__init__(*args,**{'default': '', **kwargs})
+
+    def from_db_value(self, value, expression, connection):
+        if not value:
+            return []
+        if value.startswith('[') and value.endswith(']'):
+            value = value[1:-1]
+        return [self.converter(v) for v in value.split(self.separator) if v]
+
+    def to_python(self, value):
+        if isinstance(value, list):
+            return value
+
+        return self.from_db_value(value, None, None)
+
+    def get_prep_value(self, value):
+        if self._unique_values:
+            value = list(dict.fromkeys(value))
+        if self._store_sorted:
+            value = sorted(value)
+        return self.separator.join(map(str, value))
+
+class FloatArrayField(AbstractArrayField):
+    converter = float
+
+class IntArrayField(AbstractArrayField):
+    converter = int
+
 class Data(models.Model):
     chunk_size = models.PositiveIntegerField(null=True)
     size = models.PositiveIntegerField(default=0)
@@ -94,12 +202,14 @@ class Data(models.Model):
     storage_method = models.CharField(max_length=15, choices=StorageMethodChoice.choices(), default=StorageMethodChoice.FILE_SYSTEM)
     storage = models.CharField(max_length=15, choices=StorageChoice.choices(), default=StorageChoice.LOCAL)
     cloud_storage = models.ForeignKey('CloudStorage', on_delete=models.SET_NULL, null=True, related_name='data')
+    sorting_method = models.CharField(max_length=15, choices=SortingMethod.choices(), default=SortingMethod.LEXICOGRAPHICAL)
+    deleted_frames = IntArrayField(store_sorted=True, unique_values=True)
 
     class Meta:
         default_permissions = ()
 
     def get_frame_step(self):
-        match = re.search("step\s*=\s*([1-9]\d*)", self.frame_filter)
+        match = re.search(r"step\s*=\s*([1-9]\d*)", self.frame_filter)
         return int(match.group(1)) if match else 1
 
     def get_data_dirname(self):
@@ -144,8 +254,23 @@ class Data(models.Model):
 
     def get_manifest_path(self):
         return os.path.join(self.get_upload_dirname(), 'manifest.jsonl')
+
     def get_index_path(self):
         return os.path.join(self.get_upload_dirname(), 'index.json')
+
+    def make_dirs(self):
+        data_path = self.get_data_dirname()
+        if os.path.isdir(data_path):
+            shutil.rmtree(data_path)
+        os.makedirs(self.get_compressed_cache_dirname())
+        os.makedirs(self.get_original_cache_dirname())
+        os.makedirs(self.get_upload_dirname())
+
+    def get_uploaded_files(self):
+        upload_dir = self.get_upload_dirname()
+        uploaded_files = [os.path.join(upload_dir, file) for file in os.listdir(upload_dir) if os.path.isfile(os.path.join(upload_dir, file))]
+        represented_files = [{'file':f} for f in uploaded_files]
+        return represented_files
 
 class Video(models.Model):
     data = models.OneToOneField(Data, on_delete=models.CASCADE, related_name="video", null=True)
@@ -167,21 +292,7 @@ class Image(models.Model):
     class Meta:
         default_permissions = ()
 
-
-class TrainingProject(models.Model):
-    class ProjectClass(models.TextChoices):
-        DETECTION = 'OD', _('Object Detection')
-
-    host = models.CharField(max_length=256)
-    username = models.CharField(max_length=256)
-    password = models.CharField(max_length=256)
-    training_id = models.CharField(max_length=64)
-    enabled = models.BooleanField(null=True)
-    project_class = models.CharField(max_length=2, choices=ProjectClass.choices, null=True, blank=True)
-
-
 class Project(models.Model):
-
     name = SafeCharField(max_length=256)
     owner = models.ForeignKey(User, null=True, blank=True,
                               on_delete=models.SET_NULL, related_name="+")
@@ -189,16 +300,24 @@ class Project(models.Model):
                                  on_delete=models.SET_NULL, related_name="+")
     bug_tracker = models.CharField(max_length=2000, blank=True, default="")
     created_date = models.DateTimeField(auto_now_add=True)
-    updated_date = models.DateTimeField(auto_now_add=True)
+    updated_date = models.DateTimeField(auto_now=True)
     status = models.CharField(max_length=32, choices=StatusChoice.choices(),
                               default=StatusChoice.ANNOTATION)
-    training_project = models.ForeignKey(TrainingProject, null=True, blank=True, on_delete=models.SET_NULL)
+    organization = models.ForeignKey(Organization, null=True, default=None,
+        blank=True, on_delete=models.SET_NULL, related_name="projects")
+    source_storage = models.ForeignKey('Storage', null=True, default=None,
+        blank=True, on_delete=models.SET_NULL, related_name='+')
+    target_storage = models.ForeignKey('Storage', null=True, default=None,
+        blank=True, on_delete=models.SET_NULL, related_name='+')
 
-    def get_project_dirname(self):
+    def get_dirname(self):
         return os.path.join(settings.PROJECTS_ROOT, str(self.id))
 
     def get_project_logs_dirname(self):
-        return os.path.join(self.get_project_dirname(), 'logs')
+        return os.path.join(self.get_dirname(), 'logs')
+
+    def get_tmp_dirname(self):
+        return os.path.join(self.get_dirname(), "tmp")
 
     def get_client_log_path(self):
         return os.path.join(self.get_project_logs_dirname(), "client.log")
@@ -234,16 +353,26 @@ class Task(models.Model):
     data = models.ForeignKey(Data, on_delete=models.CASCADE, null=True, related_name="tasks")
     dimension = models.CharField(max_length=2, choices=DimensionType.choices(), default=DimensionType.DIM_2D)
     subset = models.CharField(max_length=64, blank=True, default="")
+    organization = models.ForeignKey(Organization, null=True, default=None,
+        blank=True, on_delete=models.SET_NULL, related_name="tasks")
+    source_storage = models.ForeignKey('Storage', null=True, default=None,
+        blank=True, on_delete=models.SET_NULL, related_name='+')
+    target_storage = models.ForeignKey('Storage', null=True, default=None,
+        blank=True, on_delete=models.SET_NULL, related_name='+')
 
     # Extend default permission model
     class Meta:
         default_permissions = ()
 
-    def get_task_dirname(self):
+    def get_labels(self):
+        project = self.project
+        return project.label_set if project else self.label_set
+
+    def get_dirname(self):
         return os.path.join(settings.TASKS_ROOT, str(self.id))
 
     def get_task_logs_dirname(self):
-        return os.path.join(self.get_task_dirname(), 'logs')
+        return os.path.join(self.get_dirname(), 'logs')
 
     def get_client_log_path(self):
         return os.path.join(self.get_task_logs_dirname(), "client.log")
@@ -252,17 +381,13 @@ class Task(models.Model):
         return os.path.join(self.get_task_logs_dirname(), "task.log")
 
     def get_task_artifacts_dirname(self):
-        return os.path.join(self.get_task_dirname(), 'artifacts')
+        return os.path.join(self.get_dirname(), 'artifacts')
+
+    def get_tmp_dirname(self):
+        return os.path.join(self.get_dirname(), "tmp")
 
     def __str__(self):
         return self.name
-
-
-class TrainingProjectImage(models.Model):
-    task = models.ForeignKey(Task, on_delete=models.CASCADE)
-    idx = models.PositiveIntegerField()
-    training_image_id = models.CharField(max_length=64)
-
 
 # Redefined a couple of operation for FileSystemStorage to avoid renaming
 # or other side effects.
@@ -327,9 +452,49 @@ class Segment(models.Model):
 class Job(models.Model):
     segment = models.ForeignKey(Segment, on_delete=models.CASCADE)
     assignee = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
-    reviewer = models.ForeignKey(User, null=True, blank=True, related_name='review_job_set', on_delete=models.SET_NULL)
+    updated_date = models.DateTimeField(auto_now=True)
+    # TODO: it has to be deleted in Job, Task, Project and replaced by (stage, state)
+    # The stage field cannot be changed by an assignee, but state field can be. For
+    # now status is read only and it will be updated by (stage, state). Thus we don't
+    # need to update Task and Project (all should work as previously).
     status = models.CharField(max_length=32, choices=StatusChoice.choices(),
         default=StatusChoice.ANNOTATION)
+    stage = models.CharField(max_length=32, choices=StageChoice.choices(),
+        default=StageChoice.ANNOTATION)
+    state = models.CharField(max_length=32, choices=StateChoice.choices(),
+        default=StateChoice.NEW)
+
+    def get_dirname(self):
+        return os.path.join(settings.JOBS_ROOT, str(self.id))
+
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_project_id(self):
+        project = self.segment.task.project
+        return project.id if project else None
+
+    def get_organization_id(self):
+        return self.segment.task.organization
+
+    def get_bug_tracker(self):
+        task = self.segment.task
+        project = task.project
+        return task.bug_tracker or getattr(project, 'bug_tracker', None)
+
+    def get_labels(self):
+        task = self.segment.task
+        project = task.project
+        return project.label_set if project else task.label_set
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        db_commit = JobCommit(job=self, scope='create',
+            owner=self.segment.task.owner, data={
+                'stage': self.stage, 'state': self.state, 'assignee': self.assignee
+            })
+        db_commit.save()
+
+    def get_preview_path(self):
+        return os.path.join(self.get_dirname(), "preview.jpeg")
 
     class Meta:
         default_permissions = ()
@@ -339,19 +504,26 @@ class Label(models.Model):
     project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.CASCADE)
     name = SafeCharField(max_length=64)
     color = models.CharField(default='', max_length=8)
+    type = models.CharField(max_length=32, null=True, choices=LabelType.choices(), default=LabelType.ANY)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='sublabels')
 
     def __str__(self):
         return self.name
 
+    def has_parent_label(self):
+        return bool(self.parent)
+
     class Meta:
         default_permissions = ()
-        unique_together = ('task', 'name')
+        unique_together = ('task', 'name', 'parent')
 
+class Skeleton(models.Model):
+    root = models.OneToOneField(Label, on_delete=models.CASCADE)
+    svg = models.TextField(null=True, default=None)
 
-class TrainingProjectLabel(models.Model):
-    cvat_label = models.ForeignKey(Label, on_delete=models.CASCADE, related_name='training_project_label')
-    training_label_id = models.CharField(max_length=64)
-
+    class Meta:
+        default_permissions = ()
+        unique_together = ('root',)
 
 class AttributeType(str, Enum):
     CHECKBOX = 'checkbox'
@@ -398,7 +570,10 @@ class ShapeType(str, Enum):
     POLYGON = 'polygon'     # (x0, y0, ..., xn, yn)
     POLYLINE = 'polyline'   # (x0, y0, ..., xn, yn)
     POINTS = 'points'       # (x0, y0, ..., xn, yn)
+    ELLIPSE = 'ellipse'     # (cx, cy, rx, ty)
     CUBOID = 'cuboid'       # (x0, y0, ..., x7, y7)
+    MASK = 'mask'       # (rle mask, left, top, right, bottom)
+    SKELETON = 'skeleton'
 
     @classmethod
     def choices(cls):
@@ -412,20 +587,8 @@ class SourceType(str, Enum):
     MANUAL = 'manual'
 
     @classmethod
-    def choices(self):
-        return tuple((x.value, x.name) for x in self)
-
-    def __str__(self):
-        return self.value
-
-class ReviewStatus(str, Enum):
-    ACCEPTED = 'accepted'
-    REJECTED = 'rejected'
-    REVIEW_FURTHER = 'review_further'
-
-    @classmethod
-    def choices(self):
-        return tuple((x.value, x.name) for x in self)
+    def choices(cls):
+        return tuple((x.value, x.name) for x in cls)
 
     def __str__(self):
         return self.value
@@ -444,11 +607,20 @@ class Annotation(models.Model):
         default_permissions = ()
 
 class Commit(models.Model):
+    class JSONEncoder(DjangoJSONEncoder):
+        def default(self, o):
+            if isinstance(o, User):
+                data = {'user': {'id': o.id, 'username': o.username}}
+                return data
+            else:
+                return super().default(o)
+
+
     id = models.BigAutoField(primary_key=True)
-    author = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
-    version = models.PositiveIntegerField(default=0)
+    scope = models.CharField(max_length=32, default="")
+    owner = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     timestamp = models.DateTimeField(auto_now=True)
-    message = models.CharField(max_length=4096, default="")
+    data = models.JSONField(default=dict, encoder=JSONEncoder)
 
     class Meta:
         abstract = True
@@ -457,28 +629,13 @@ class Commit(models.Model):
 class JobCommit(Commit):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="commits")
 
-class FloatArrayField(models.TextField):
-    separator = ","
-
-    def from_db_value(self, value, expression, connection):
-        if not value:
-            return value
-        return [float(v) for v in value.split(self.separator)]
-
-    def to_python(self, value):
-        if isinstance(value, list):
-            return value
-
-        return self.from_db_value(value, None, None)
-
-    def get_prep_value(self, value):
-        return self.separator.join(map(str, value))
-
 class Shape(models.Model):
     type = models.CharField(max_length=16, choices=ShapeType.choices())
     occluded = models.BooleanField(default=False)
+    outside = models.BooleanField(default=False)
     z_order = models.IntegerField(default=0)
-    points = FloatArrayField()
+    points = FloatArrayField(default=[])
+    rotation = FloatField(default=0)
 
     class Meta:
         abstract = True
@@ -491,13 +648,13 @@ class LabeledImageAttributeVal(AttributeVal):
     image = models.ForeignKey(LabeledImage, on_delete=models.CASCADE)
 
 class LabeledShape(Annotation, Shape):
-    pass
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, related_name='elements')
 
 class LabeledShapeAttributeVal(AttributeVal):
     shape = models.ForeignKey(LabeledShape, on_delete=models.CASCADE)
 
 class LabeledTrack(Annotation):
-    pass
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, related_name='elements')
 
 class LabeledTrackAttributeVal(AttributeVal):
     track = models.ForeignKey(LabeledTrack, on_delete=models.CASCADE)
@@ -506,7 +663,6 @@ class TrackedShape(Shape):
     id = models.BigAutoField(primary_key=True)
     track = models.ForeignKey(LabeledTrack, on_delete=models.CASCADE)
     frame = models.PositiveIntegerField()
-    outside = models.BooleanField(default=False)
 
 class TrackedShapeAttributeVal(AttributeVal):
     shape = models.ForeignKey(TrackedShape, on_delete=models.CASCADE)
@@ -515,29 +671,36 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     rating = models.FloatField(default=0.0)
 
-class Review(models.Model):
-    job = models.ForeignKey(Job, on_delete=models.CASCADE)
-    reviewer = models.ForeignKey(User, null=True, blank=True, related_name='reviews', on_delete=models.SET_NULL)
-    assignee = models.ForeignKey(User, null=True, blank=True, related_name='reviewed', on_delete=models.SET_NULL)
-    estimated_quality = models.FloatField()
-    status = models.CharField(max_length=16, choices=ReviewStatus.choices())
-
 class Issue(models.Model):
     frame = models.PositiveIntegerField()
     position = FloatArrayField()
-    job = models.ForeignKey(Job, on_delete=models.CASCADE)
-    review = models.ForeignKey(Review, null=True, blank=True, on_delete=models.SET_NULL)
-    owner = models.ForeignKey(User, null=True, blank=True, related_name='issues', on_delete=models.SET_NULL)
-    resolver = models.ForeignKey(User, null=True, blank=True, related_name='resolved_issues', on_delete=models.SET_NULL)
+    job = models.ForeignKey(Job, related_name='issues', on_delete=models.CASCADE)
+    owner = models.ForeignKey(User, null=True, blank=True, related_name='+',
+        on_delete=models.SET_NULL)
+    assignee = models.ForeignKey(User, null=True, blank=True, related_name='+',
+        on_delete=models.SET_NULL)
     created_date = models.DateTimeField(auto_now_add=True)
-    resolved_date = models.DateTimeField(null=True, blank=True)
+    updated_date = models.DateTimeField(null=True, blank=True)
+    resolved = models.BooleanField(default=False)
+
+    def get_project_id(self):
+        return self.job.get_project_id()
+
+    def get_organization_id(self):
+        return self.job.get_organization_id()
 
 class Comment(models.Model):
-    issue = models.ForeignKey(Issue, on_delete=models.CASCADE)
-    author = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    issue = models.ForeignKey(Issue, related_name='comments', on_delete=models.CASCADE)
+    owner = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     message = models.TextField(default='')
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
+
+    def get_project_id(self):
+        return self.issue.get_project_id()
+
+    def get_organization_id(self):
+        return self.issue.get_organization_id()
 
 class CloudProviderChoice(str, Enum):
     AWS_S3 = 'AWS_S3_BUCKET'
@@ -581,17 +744,36 @@ class Manifest(models.Model):
     def __str__(self):
         return '{}'.format(self.filename)
 
+class Location(str, Enum):
+    CLOUD_STORAGE = 'cloud_storage'
+    LOCAL = 'local'
+
+    @classmethod
+    def choices(cls):
+        return tuple((x.value, x.name) for x in cls)
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def list(cls):
+        return [i.value for i in cls]
+
 class CloudStorage(models.Model):
     # restrictions:
-    # AWS bucket name, Azure container name - 63
-    # AWS access key id - 20
-    # AWS secret access key - 40
-    # AWS temporary session tocken - None
+    # AWS bucket name, Azure container name - 63, Google bucket name - 63 without dots and 222 with dots
+    # https://cloud.google.com/storage/docs/naming-buckets#requirements
+    # AWS access key id - 20, Oracle OCI access key id - 40
+    # AWS secret access key - 40, Oracle OCI secret key id - 44
+    # AWS temporary session token - None
     # The size of the security token that AWS STS API operations return is not fixed.
     # We strongly recommend that you make no assumptions about the maximum size.
     # The typical token size is less than 4096 bytes, but that can vary.
+    # specific attributes:
+    # location - max 23
+    # project ID: 6 - 30 (https://cloud.google.com/resource-manager/docs/creating-managing-projects#before_you_begin)
     provider_type = models.CharField(max_length=20, choices=CloudProviderChoice.choices())
-    resource = models.CharField(max_length=63)
+    resource = models.CharField(max_length=222)
     display_name = models.CharField(max_length=63)
     owner = models.ForeignKey(User, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="cloud_storages")
@@ -599,12 +781,14 @@ class CloudStorage(models.Model):
     updated_date = models.DateTimeField(auto_now=True)
     credentials = models.CharField(max_length=500)
     credentials_type = models.CharField(max_length=29, choices=CredentialsTypeChoice.choices())#auth_type
-    specific_attributes = models.CharField(max_length=50, blank=True)
+    specific_attributes = models.CharField(max_length=1024, blank=True)
     description = models.TextField(blank=True)
+    organization = models.ForeignKey(Organization, null=True, default=None,
+        blank=True, on_delete=models.SET_NULL, related_name="cloudstorages")
 
     class Meta:
         default_permissions = ()
-        unique_together = (('provider_type', 'resource', 'credentials'),)
+        unique_together = ('provider_type', 'resource', 'credentials')
 
     def __str__(self):
         return "{} {} {}".format(self.provider_type, self.display_name, self.id)
@@ -623,3 +807,13 @@ class CloudStorage(models.Model):
 
     def get_specific_attributes(self):
         return parse_specific_attributes(self.specific_attributes)
+
+    def get_key_file_path(self):
+        return os.path.join(self.get_storage_dirname(), 'key.json')
+
+class Storage(models.Model):
+    location = models.CharField(max_length=16, choices=Location.choices(), default=Location.LOCAL)
+    cloud_storage_id = models.IntegerField(null=True, blank=True, default=None)
+
+    class Meta:
+        default_permissions = ()

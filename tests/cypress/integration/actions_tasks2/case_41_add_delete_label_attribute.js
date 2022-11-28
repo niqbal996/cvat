@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -13,7 +13,8 @@ context('Add/delete labels and attributes.', () => {
     before(() => {
         cy.visit('auth/login');
         cy.login();
-        cy.get('#cvat-create-task-button').click();
+        cy.get('.cvat-create-task-dropdown').click();
+        cy.get('.cvat-create-task-button').click();
     });
 
     describe(`Testing "${labelName}"`, () => {
@@ -44,7 +45,8 @@ context('Add/delete labels and attributes.', () => {
             cy.get('.cvat-attribute-type-input').click();
             cy.get('.cvat-attribute-type-input-text').click();
             cy.get('.cvat-attribute-values-input').type(textDefaultValue);
-            cy.contains('[type="submit"]', 'Done').click();
+            cy.contains('[type="submit"]', 'Continue').click();
+            cy.contains('[type="button"]', 'Cancel').click();
             cy.get('.cvat-constructor-viewer-item').should('exist');
         });
 
@@ -64,7 +66,7 @@ context('Add/delete labels and attributes.', () => {
         });
 
         it('Delete the added label. The label removed.', () => {
-            cy.get('.cvat-constructor-viewer-item').find('[aria-label="close"]').click();
+            cy.get('.cvat-constructor-viewer-item').find('[aria-label="delete"]').click();
             cy.get('.cvat-constructor-viewer-item').should('not.exist');
         });
     });

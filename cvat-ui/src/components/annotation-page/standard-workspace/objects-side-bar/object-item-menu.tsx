@@ -1,18 +1,13 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import React from 'react';
 import Menu from 'antd/lib/menu';
 import Button from 'antd/lib/button';
-import Modal from 'antd/lib/modal';
 import Icon, {
-    LinkOutlined,
-    CopyOutlined,
-    BlockOutlined,
-    GatewayOutlined,
-    RetweetOutlined,
-    DeleteOutlined,
+    LinkOutlined, CopyOutlined, BlockOutlined, RetweetOutlined, DeleteOutlined, EditOutlined,
 } from '@ant-design/icons';
 
 import {
@@ -21,7 +16,7 @@ import {
 import CVATTooltip from 'components/common/cvat-tooltip';
 import {
     ObjectType, ShapeType, ColorBy, DimensionType,
-} from 'reducers/interfaces';
+} from 'reducers';
 import ColorPicker from './color-picker';
 
 interface Props {
@@ -50,7 +45,7 @@ interface Props {
     toForeground(): void;
     resetCuboidPerspective(): void;
     changeColorPickerVisible(visible: boolean): void;
-    activateTracking(): void;
+    edit(): void;
     jobInstance: any;
 }
 
@@ -84,6 +79,20 @@ function MakeCopyItem(props: ItemProps): JSX.Element {
     );
 }
 
+function EditMaskItem(props: ItemProps): JSX.Element {
+    const { toolProps, ...rest } = props;
+    const { edit } = toolProps;
+    return (
+        <Menu.Item {...rest}>
+            <CVATTooltip title='Shift + Double click'>
+                <Button type='link' icon={<EditOutlined />} onClick={edit}>
+                    Edit
+                </Button>
+            </CVATTooltip>
+        </Menu.Item>
+    );
+}
+
 function PropagateItem(props: ItemProps): JSX.Element {
     const { toolProps, ...rest } = props;
     const { propagateShortcut, propagate } = toolProps;
@@ -92,20 +101,6 @@ function PropagateItem(props: ItemProps): JSX.Element {
             <CVATTooltip title={`${propagateShortcut}`}>
                 <Button type='link' icon={<BlockOutlined />} onClick={propagate}>
                     Propagate
-                </Button>
-            </CVATTooltip>
-        </Menu.Item>
-    );
-}
-
-function TrackingItem(props: ItemProps): JSX.Element {
-    const { toolProps, ...rest } = props;
-    const { activateTracking } = toolProps;
-    return (
-        <Menu.Item {...rest}>
-            <CVATTooltip title='Run tracking with the active tracker'>
-                <Button type='link' icon={<GatewayOutlined />} onClick={activateTracking}>
-                    Track
                 </Button>
             </CVATTooltip>
         </Menu.Item>
@@ -199,27 +194,14 @@ function SwitchColorItem(props: ItemProps): JSX.Element {
 
 function RemoveItem(props: ItemProps): JSX.Element {
     const { toolProps, ...rest } = props;
-    const { removeShortcut, locked, remove } = toolProps;
+    const { removeShortcut, remove } = toolProps;
     return (
         <Menu.Item {...rest}>
             <CVATTooltip title={`${removeShortcut}`}>
                 <Button
                     type='link'
                     icon={<DeleteOutlined />}
-                    onClick={(): void => {
-                        if (locked) {
-                            Modal.confirm({
-                                className: 'cvat-modal-confirm',
-                                title: 'Object is locked',
-                                content: 'Are you sure you want to remove it?',
-                                onOk() {
-                                    remove();
-                                },
-                            });
-                        } else {
-                            remove();
-                        }
-                    }}
+                    onClick={remove}
                 >
                     Remove
                 </Button>
@@ -233,24 +215,45 @@ export default function ItemMenu(props: Props): JSX.Element {
         readonly, shapeType, objectType, colorBy, jobInstance,
     } = props;
 
-    const is2D = jobInstance.task.dimension === DimensionType.DIM_2D;
+    enum MenuKeys {
+        CREATE_URL = 'create_url',
+        COPY = 'copy',
+        PROPAGATE = 'propagate',
+        SWITCH_ORIENTATION = 'switch_orientation',
+        RESET_PERSPECIVE = 'reset_perspective',
+        TO_BACKGROUND = 'to_background',
+        TO_FOREGROUND = 'to_foreground',
+        SWITCH_COLOR = 'switch_color',
+        REMOVE_ITEM = 'remove_item',
+        EDIT_MASK = 'edit_mask',
+    }
+
+    const is2D = jobInstance.dimension === DimensionType.DIM_2D;
 
     return (
         <Menu className='cvat-object-item-menu' selectable={false}>
-            <CreateURLItem toolProps={props} />
-            {!readonly && <MakeCopyItem toolProps={props} />}
-            {!readonly && <PropagateItem toolProps={props} />}
-            {is2D && !readonly && objectType === ObjectType.TRACK && shapeType === ShapeType.RECTANGLE && (
-                <TrackingItem toolProps={props} />
+            <CreateURLItem key={MenuKeys.CREATE_URL} toolProps={props} />
+            {!readonly && objectType !== ObjectType.TAG && (
+                <MakeCopyItem key={MenuKeys.COPY} toolProps={props} />
             )}
+            {!readonly && <EditMaskItem key={MenuKeys.EDIT_MASK} toolProps={props} />}
+            {!readonly && <PropagateItem key={MenuKeys.PROPAGATE} toolProps={props} />}
             {is2D && !readonly && [ShapeType.POLYGON, ShapeType.POLYLINE, ShapeType.CUBOID].includes(shapeType) && (
-                <SwitchOrientationItem toolProps={props} />
+                <SwitchOrientationItem key={MenuKeys.SWITCH_ORIENTATION} toolProps={props} />
             )}
-            {is2D && !readonly && shapeType === ShapeType.CUBOID && <ResetPerspectiveItem toolProps={props} />}
-            {is2D && objectType !== ObjectType.TAG && <ToBackgroundItem toolProps={props} />}
-            {is2D && !readonly && objectType !== ObjectType.TAG && <ToForegroundItem toolProps={props} />}
-            {[ColorBy.INSTANCE, ColorBy.GROUP].includes(colorBy) && <SwitchColorItem toolProps={props} />}
-            {!readonly && <RemoveItem toolProps={props} />}
+            {is2D && !readonly && shapeType === ShapeType.CUBOID && (
+                <ResetPerspectiveItem key={MenuKeys.RESET_PERSPECIVE} toolProps={props} />
+            )}
+            {is2D && objectType !== ObjectType.TAG && (
+                <ToBackgroundItem key={MenuKeys.TO_BACKGROUND} toolProps={props} />
+            )}
+            {is2D && !readonly && objectType !== ObjectType.TAG && (
+                <ToForegroundItem key={MenuKeys.TO_FOREGROUND} toolProps={props} />
+            )}
+            {[ColorBy.INSTANCE, ColorBy.GROUP].includes(colorBy) && (
+                <SwitchColorItem key={MenuKeys.SWITCH_COLOR} toolProps={props} />
+            )}
+            {!readonly && <RemoveItem key={MenuKeys.REMOVE_ITEM} toolProps={props} />}
         </Menu>
     );
 }

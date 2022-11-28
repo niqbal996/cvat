@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Intel Corporation
+# Copyright (C) 2021-2022 Intel Corporation
 #
 # SPDX-License-Identifier: MIT
 import argparse
@@ -6,6 +6,7 @@ import os
 import sys
 import re
 from glob import glob
+from tqdm import tqdm
 
 from utils import detect_related_images, is_image, is_video
 
@@ -16,6 +17,8 @@ def get_args():
              'if by default the video does not meet the requirements and a manifest file is not prepared')
     parser.add_argument('--output-dir',type=str, help='Directory where the manifest file will be saved',
         default=os.getcwd())
+    parser.add_argument('--sorting', choices=['lexicographical', 'natural', 'predefined', 'random'],
+                        type=str, default='lexicographical')
     parser.add_argument('source', type=str, help='Source paths')
     return parser.parse_args()
 
@@ -23,7 +26,8 @@ def main():
     args = get_args()
 
     manifest_directory = os.path.abspath(args.output_dir)
-    os.makedirs(manifest_directory, exist_ok=True)
+    if not os.path.exists(manifest_directory):
+        os.makedirs(manifest_directory)
     source = os.path.abspath(os.path.expanduser(args.source))
 
     sources = []
@@ -53,7 +57,7 @@ def main():
 
         # If the source is a glob expression, we need additional processing
         abs_root = source
-        while abs_root and re.search('[*?\[\]]', abs_root):
+        while abs_root and re.search(r'[*?\[\]]', abs_root):
             abs_root = os.path.split(abs_root)[0]
 
         related_images = detect_related_images(sources, abs_root)
@@ -61,17 +65,18 @@ def main():
         try:
             assert len(sources), 'A images was not found'
             manifest = ImageManifestManager(manifest_path=manifest_directory)
-            meta_info = manifest.prepare_meta(sources=sources, meta=meta, is_sorted=False,
-                use_image_hash=True, data_dir=data_dir)
-            manifest.create(meta_info)
+            manifest.link(sources=sources, meta=meta, sorting_method=args.sorting,
+                    use_image_hash=True, data_dir=data_dir)
+            manifest.create(_tqdm=tqdm)
         except Exception as ex:
             sys.exit(str(ex))
     else: # video
         try:
             assert is_video(source), 'You can specify a video path or a directory/pattern with images'
             manifest = VideoManifestManager(manifest_path=manifest_directory)
+            manifest.link(media_file=source, force=args.force)
             try:
-                meta_info = manifest.prepare_meta(media_file=source, force=args.force)
+                manifest.create(_tqdm=tqdm)
             except AssertionError as ex:
                 if str(ex) == 'Too few keyframes':
                     msg = 'NOTE: prepared manifest file contains too few key frames for smooth decoding.\n' \
@@ -80,7 +85,6 @@ def main():
                     sys.exit(2)
                 else:
                     raise
-            manifest.create(meta_info)
         except Exception as ex:
             sys.exit(str(ex))
 

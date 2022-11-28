@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -23,19 +23,17 @@ context('Export, import an annotation task.', { browser: '!firefox' }, () => {
     const directoryToArchive = imagesFolder;
     const newLabelName = 'person';
     let taskId;
-    let taskBackupArchiveShortName = `task_${taskName.toLowerCase()}_backup`;
     let taskBackupArchiveFullName;
+    let ctmBeforeExport;
 
-    const createPointsShape = {
+    const createRectangleShape2Points = {
+        points: 'By 2 Points',
         type: 'Shape',
-        labelName: labelName,
-        pointsMap: [
-            { x: 200, y: 200 },
-            { x: 250, y: 200 },
-            { x: 250, y: 250 },
-        ],
-        complete: true,
-        numberOfPoints: null,
+        labelName,
+        firstX: 250,
+        firstY: 350,
+        secondX: 350,
+        secondY: 450,
     };
 
     before(() => {
@@ -50,7 +48,25 @@ context('Export, import an annotation task.', { browser: '!firefox' }, () => {
         });
         cy.addNewLabel(newLabelName);
         cy.openJob();
-        cy.createPoint(createPointsShape);
+        cy.createRectangle(createRectangleShape2Points).then(() => {
+            Cypress.config('scrollBehavior', false);
+        });
+        cy.get('#cvat_canvas_shape_1')
+            .trigger('mousemove')
+            .trigger('mouseover')
+            .should('have.class', 'cvat_canvas_shape_activated');
+        cy.get('.svg_select_points_rot')
+            .should('be.visible')
+            .and('have.length', 1)
+            .trigger('mousemove')
+            .trigger('mouseover');
+        cy.get('.svg_select_points_rot').trigger('mousedown', { button: 0 });
+        cy.get('.cvat-canvas-container').trigger('mousemove', 340, 150);
+        cy.get('.cvat-canvas-container').trigger('mouseup');
+        cy.get('#cvat_canvas_shape_1').should('have.attr', 'transform');
+        cy.document().then((doc) => {
+            ctmBeforeExport = doc.getElementById('cvat_canvas_shape_1').getCTM();
+        });
         cy.saveJob();
         cy.goToTaskList();
     });
@@ -66,28 +82,45 @@ context('Export, import an annotation task.', { browser: '!firefox' }, () => {
                 .parents('.cvat-tasks-list-item')
                 .find('.cvat-item-open-task-actions > .cvat-menu-icon')
                 .trigger('mouseover');
-            cy.intercept('GET', '/api/v1/tasks/**?action=export').as('exportTask');
             cy.get('.ant-dropdown')
                 .not('.ant-dropdown-hidden')
                 .within(() => {
-                    cy.contains('[role="menuitem"]', new RegExp('^Export task$')).click().trigger('mouseout');
+                    cy.contains('[role="menuitem"]', new RegExp('^Backup Task$')).click();
                 });
-            cy.wait('@exportTask', { timeout: 5000 }).its('response.statusCode').should('equal', 202);
-            cy.wait('@exportTask').its('response.statusCode').should('equal', 201);
-            cy.deleteTask(taskName);
-            cy.task('listFiles', 'cypress/fixtures').each((fileName) => {
-                if (fileName.includes(taskBackupArchiveShortName)) {
-                    taskBackupArchiveFullName = fileName;
-                }
+            cy.get('.cvat-modal-export-task').find('.cvat-modal-export-filename-input').type(archiveName);
+            cy.get('.cvat-modal-export-task').contains('button', 'OK').click();
+            cy.get('.cvat-notification-notice-export-backup-start').should('be.visible');
+            cy.closeNotification('.cvat-notification-notice-export-backup-start');
+            cy.getDownloadFileName().then((file) => {
+                taskBackupArchiveFullName = file;
+                cy.verifyDownload(taskBackupArchiveFullName);
             });
+            cy.verifyNotification();
+            cy.deleteTask(taskName);
         });
 
         it('Import the task. Check id, labels, shape.', () => {
-            cy.intercept('POST', '/api/v1/tasks?action=import').as('importTask');
-            cy.get('.cvat-import-task').click().find('input[type=file]').attachFile(taskBackupArchiveFullName);
-            cy.wait('@importTask', { timeout: 5000 }).its('response.statusCode').should('equal', 202);
+            cy.intercept({ method: /PATCH|POST/, url: /\/api\/tasks\/backup.*/ }).as('importTask');
+            cy.get('.cvat-create-task-dropdown').click();
+            cy.get('.cvat-import-task-button').click();
+            cy.get('input[type=file]').attachFile(taskBackupArchiveFullName, { subjectType: 'drag-n-drop' });
+            cy.get(`[title="${taskBackupArchiveFullName}"]`).should('be.visible');
+            cy.contains('button', 'OK').click();
+            cy.get('.cvat-notification-notice-import-backup-start').should('be.visible');
+            cy.closeNotification('.cvat-notification-notice-import-backup-start');
+
+            cy.wait('@importTask').its('response.statusCode').should('equal', 202);
             cy.wait('@importTask').its('response.statusCode').should('equal', 201);
-            cy.contains('Task has been imported succesfully').should('exist').and('be.visible');
+            cy.wait('@importTask').its('response.statusCode').should('equal', 204);
+            cy.wait('@importTask').its('response.statusCode').should('equal', 202);
+            cy.wait('@importTask').then((interception) => {
+                cy.wrap(interception).its('response.statusCode').should('be.oneOf', [201, 202]);
+                if (interception.response.statusCode === 202) {
+                    cy.wait('@importTask').its('response.statusCode').should('equal', 201);
+                }
+            });
+            cy.contains('The task has been restored succesfully. Click here to open').should('exist').and('be.visible');
+            cy.closeNotification('.ant-notification-notice-info');
             cy.openTask(taskName);
             cy.url().then((link) => {
                 expect(Number(link.split('/').slice(-1)[0])).to.be.equal(taskId + 1);
@@ -96,8 +129,16 @@ context('Export, import an annotation task.', { browser: '!firefox' }, () => {
                 expect(labels.length).to.be.equal(2);
             });
             cy.openJob(0, false);
-            cy.get('#cvat_canvas_shape_1').should('exist');
             cy.get('#cvat-objects-sidebar-state-item-1').should('exist');
+
+            // Check fix 3932 "Rotation property is not dumped when backup a task"
+            cy.get('#cvat_canvas_shape_1')
+                .should('be.visible')
+                .and('have.attr', 'transform');
+            cy.document().then((doc) => {
+                const ctmAfterImport = doc.getElementById('cvat_canvas_shape_1').getCTM();
+                expect(ctmAfterImport).to.deep.eq(ctmBeforeExport);
+            });
         });
     });
 });

@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -19,7 +19,7 @@ import {
 } from 'icons';
 import {
     CombinedState, DimensionType, Workspace, PredictorState,
-} from 'reducers/interfaces';
+} from 'reducers';
 
 interface Props {
     workspace: Workspace;
@@ -175,7 +175,7 @@ function RightGroup(props: Props): JSX.Element {
                     value={workspace}
                 >
                     {Object.values(Workspace).map((ws) => {
-                        if (jobInstance.task.dimension === DimensionType.DIM_3D) {
+                        if (jobInstance.dimension === DimensionType.DIM_3D) {
                             if (ws === Workspace.STANDARD) {
                                 return null;
                             }

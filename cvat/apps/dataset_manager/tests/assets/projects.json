@@ -1,9 +1,12 @@
 {
   "main": {
     "name": "Main project",
-    "owner_id": 1,
-    "assignee_id": 2,
     "labels": [
+      {
+        "name": "background",
+        "color": "#5c5eba",
+        "attributes": []
+      },
       {
         "name": "car",
         "color": "#2080c0",

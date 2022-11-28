@@ -45,7 +45,10 @@
             "python": "${command:python.interpreterPath}",
             "program": "${workspaceRoot}/manage.py",
             "env": {
-                "CVAT_SERVERLESS":  "1"
+                "CVAT_SERVERLESS": "1",
+                "ALLOWED_HOSTS": "*",
+                "IAM_OPA_BUNDLE": "1"
+
             },
             "args": [
                 "runserver",
@@ -62,10 +65,10 @@
             "type": "pwa-chrome",
             "request": "launch",
             "url": "http://localhost:7000/",
-            "disableNetworkCache":true,
+            "disableNetworkCache": true,
             "trace": true,
             "showAsyncStacks": true,
-            "pathMapping":{
+            "pathMapping": {
                 "/static/engine/": "${workspaceFolder}/cvat/apps/engine/static/engine/",
                 "/static/dashboard/": "${workspaceFolder}/cvat/apps/dashboard/static/dashboard/",
             }
@@ -111,11 +114,30 @@
             "request": "launch",
             "justMyCode": false,
             "stopOnEntry": false,
-            "python":"${command:python.interpreterPath}",
+            "python": "${command:python.interpreterPath}",
             "program": "${workspaceRoot}/manage.py",
             "args": [
                 "rqworker",
                 "low",
+                "--worker-class",
+                "cvat.simpleworker.SimpleWorker",
+            ],
+            "django": true,
+            "cwd": "${workspaceFolder}",
+            "env": {},
+            "console": "internalConsole"
+        },
+        {
+            "name": "server: RQ - webhooks",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}",
+            "program": "${workspaceRoot}/manage.py",
+            "args": [
+                "rqworker",
+                "webhooks",
                 "--worker-class",
                 "cvat.simpleworker.SimpleWorker",
             ],
@@ -169,7 +191,97 @@
                 "--settings",
                 "cvat.settings.testing",
                 "cvat/apps",
-                "utils/cli"
+                "cvat-cli/"
+            ],
+            "django": true,
+            "cwd": "${workspaceFolder}",
+            "env": {},
+            "console": "internalConsole"
+        },
+        {
+            "name": "server: REST API tests",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}",
+            "module": "pytest",
+            "args": [
+                "tests/python/rest_api/"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "sdk: tests",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}",
+            "module": "pytest",
+            "args": [
+                "tests/python/sdk/"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "cli: tests",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}",
+            "module": "pytest",
+            "args": [
+                "tests/python/cli/"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "api client: Postprocess generator output",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}",
+            "program": "${workspaceFolder}/cvat-sdk/gen/postprocess.py",
+            "args": [
+                "--schema", "${workspaceFolder}/cvat-sdk/schema/schema.yml",
+                "--input-path", "${workspaceFolder}/cvat-sdk/cvat_sdk/"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "sdk docs: Postprocess generated docs",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}",
+            "program": "${workspaceFolder}/site/process_sdk_docs.py",
+            "args": [
+                "--input-dir", "${workspaceFolder}/cvat-sdk/docs/",
+                "--site-root", "${workspaceFolder}/site/",
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "server: Generate REST API Schema",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "${command:python.interpreterPath}",
+            "program": "${workspaceRoot}/manage.py",
+            "args": [
+                "spectacular",
+                "--file",
+                "schema.yml"
             ],
             "django": true,
             "cwd": "${workspaceFolder}",
@@ -193,10 +305,10 @@
             "type": "node",
             "request": "launch",
             "name": "jest debug",
-            "program": "${workspaceFolder}/cvat-core/node_modules/.bin/jest",
+            "program": "${workspaceFolder}/node_modules/.bin/jest",
             "args": [
-              "--config",
-              "${workspaceFolder}/cvat-core/jest.config.js"
+                "--config",
+                "${workspaceFolder}/cvat-core/jest.config.js"
             ],
             "console": "integratedTerminal",
             "internalConsoleOptions": "neverOpen",
@@ -210,6 +322,7 @@
                 "server: django",
                 "server: RQ - default",
                 "server: RQ - low",
+                "server: RQ - webhooks",
                 "server: RQ - scheduler",
                 "server: git",
             ]

@@ -1,7 +1,7 @@
 ---
 title: 'Serverless tutorial'
 linkTitle: 'Serverless tutorial'
-weight: 31
+weight: 32
 ---
 
 ## Introduction
@@ -64,12 +64,14 @@ with specific configuration files. In the case it is `docker-compose.serverless.
 It has necessary instructions how to build and deploy Nuclio platform as a
 docker container and enable corresponding support in CVAT.
 
-```console
-$ docker-compose -f docker-compose.yml -f docker-compose.dev.yml -f components/serverless/docker-compose.serverless.yml up -d --build
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml -f components/serverless/docker-compose.serverless.yml up -d --build
 ```
 
-```console
-$ docker-compose -f docker-compose.yml -f docker-compose.dev.yml -f components/serverless/docker-compose.serverless.yml ps
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml -f components/serverless/docker-compose.serverless.yml ps
+```
+```
    Name                 Command                  State                            Ports
 -------------------------------------------------------------------------------------------------------------
 cvat         /usr/bin/supervisord             Up             8080/tcp
@@ -87,8 +89,10 @@ is already installed on your operating system. Run the following
 command to check that it works. In the beginning you should not have
 any deployed serverless functions.
 
-```console
-$ nuctl get functions
+```bash
+nuctl get functions
+```
+```
 No functions found
 ```
 
@@ -104,10 +108,12 @@ First step is to deploy [SiamMask][siammask-serverless]. The deployment process
 can depend on your operating system. On Linux you can use `serverless/deploy_cpu.sh`
 auxiliary script, but below we are using `nuctl` directly.
 
-```console
-$ nuctl create project cvat
+```bash
+nuctl create project cvat
 
 nuctl deploy --project-name cvat --path "./serverless/pytorch/foolwood/siammask/nuclio" --platform local
+```
+```
 21.05.07 13:00:22.233                     nuctl (I) Deploying function {"name": ""}
 21.05.07 13:00:22.233                     nuctl (I) Building {"versionInfo": "Label: 1.5.16, Git commit: ae43a6a560c2bec42d7ccfdf6e8e11a1e3cc3774, OS: linux, Arch: amd64, Go version: go1.14.3", "name": ""}
 21.05.07 13:00:22.652                     nuctl (I) Cleaning up before deployment {"functionName": "pth-foolwood-siammask"}
@@ -123,8 +129,10 @@ nuctl deploy --project-name cvat --path "./serverless/pytorch/foolwood/siammask/
 21.05.07 13:00:32.796                     nuctl (I) Function deploy complete {"functionName": "pth-foolwood-siammask", "httpPort": 49155}
 ```
 
-```console
-$ nuctl get functions
+```bash
+nuctl get functions
+```
+```
   NAMESPACE |         NAME          | PROJECT | STATE | NODE PORT | REPLICAS
   nuclio    | pth-foolwood-siammask | cvat    | ready |     49155 | 1/1
 ```
@@ -145,13 +153,17 @@ finish the process.
 ![Create a video annotation task](/images/create_video_task.png)
 
 Open the task and use [AI tools][cvat-ai-tools-user-guide] to start tracking
-an object. Draw a bounding box around an object.
+an object. Draw a bounding box around an object, and sequentially switch
+through the frame and correct the restrictive box if necessary.
 
-![Start tracking an object](/images/start_tracking.png)
+![Start tracking an object](/images/trackers_tab.jpg)
 
-Finally you will get bounding boxes for 10 frames by default.
+Finally you will get bounding boxes.
 
 ![SiamMask results](/images/siammask_results.gif)
+
+`SiamMask` model is more optimized to work on Nvidia GPUs.
+For more information about deploying the model for the GPU, [read on](#objects-segmentation-using-mask-rcnn).
 
 ### Object detection using YOLO-v3
 
@@ -164,13 +176,13 @@ command. Inference of the serverless function is optimized for CPU using
 <details>
 <summary>
 
-```console
-$ serverless/deploy_cpu.sh serverless/openvino/omz/public/yolo-v3-tf/
+```bash
+serverless/deploy_cpu.sh serverless/openvino/omz/public/yolo-v3-tf/
 ```
 
 </summary>
 
-```console
+```
 Deploying serverless/openvino/omz/public/yolo-v3-tf function...
 21.07.12 15:55:17.314                     nuctl (I) Deploying function {"name": ""}
 21.07.12 15:55:17.314                     nuctl (I) Building {"versionInfo": "Label: 1.5.16, Git commit: ae43a6a560c2bec42d7ccfdf6e8e11a1e3cc3774, OS: linux, Arch: amd64, Go version: go1.14.3", "name": ""}
@@ -230,13 +242,13 @@ autoscaler does not support the local platform (docker)._
 <details>
 <summary>
 
-```console
-$ serverless/deploy_gpu.sh serverless/tensorflow/matterport/mask_rcnn
+```bash
+serverless/deploy_gpu.sh serverless/tensorflow/matterport/mask_rcnn
 ```
 
 </summary>
 
-```console
+```
 Deploying serverless/tensorflow/matterport/mask_rcnn function...
 21.07.12 16:48:48.995                     nuctl (I) Deploying function {"name": ""}
 21.07.12 16:48:48.995                     nuctl (I) Building {"versionInfo": "Label: 1.5.16, Git commit: ae43a6a560c2bec42d7ccfdf6e8e11a1e3cc3774, OS: linux, Arch: amd64, Go version: go1.14.3", "name": ""}
@@ -276,9 +288,9 @@ of computer vision research projects and production applications in Facebook.
 Clone the repository somewhere. I assume that all other experiments will be
 run from the cloned `detectron2` directory.
 
-```console
-$ git clone https://github.com/facebookresearch/detectron2
-$ cd detectron2
+```bash
+git clone https://github.com/facebookresearch/detectron2
+cd detectron2
 ```
 
 ### Run local experiments
@@ -291,18 +303,18 @@ In my case I have Ubuntu 20.04 with python 3.8.5. I installed
 a virtual environment. Follow [opencv-python][opencv-python-github]
 installation guide to get the library for demo and visualization.
 
-```console
-$ python3 -m venv .detectron2
-$ . .detectron2/bin/activate
-$ pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
-$ pip install opencv-python
+```bash
+python3 -m venv .detectron2
+. .detectron2/bin/activate
+pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
+pip install opencv-python
 ```
 
 Install the detectron2 library from your local clone (you should be inside
 detectron2 directory).
 
-```console
-$ python -m pip install -e .
+```bash
+python -m pip install -e .
 ```
 
 After the library from Facebook AI Research is installed, we can run a couple
@@ -310,22 +322,22 @@ of experiments. See the [official tutorial][detectron2-tutorial] for more
 examples. I decided to experiment with [RetinaNet][retinanet-model-zoo]. First
 step is to download model weights.
 
-```console
-$ curl -O https://dl.fbaipublicfiles.com/detectron2/COCO-Detection/retinanet_R_101_FPN_3x/190397697/model_final_971ab9.pkl
+```bash
+curl -O https://dl.fbaipublicfiles.com/detectron2/COCO-Detection/retinanet_R_101_FPN_3x/190397697/model_final_971ab9.pkl
 ```
 
 To run experiments let's download an image with cats from wikipedia.
 
-```console
-$ curl -O https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Cat_poster_1.jpg/1920px-Cat_poster_1.jpg
+```bash
+curl -O https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Cat_poster_1.jpg/1920px-Cat_poster_1.jpg
 ```
 
 Finally let's run the DL model inference on CPU. If all is fine, you will see
 a window with cats and bounding boxes around them with scores.
 
-```console
-$ python demo/demo.py --config-file configs/COCO-Detection/retinanet_R_101_FPN_3x.yaml \
-    --input 1920px-Cat_poster_1.jpg --opts MODEL.WEIGHTS model_final_971ab9.pkl MODEL.DEVICE cpu
+```bash
+python demo/demo.py --config-file configs/COCO-Detection/retinanet_R_101_FPN_3x.yaml \
+  --input 1920px-Cat_poster_1.jpg --opts MODEL.WEIGHTS model_final_971ab9.pkl MODEL.DEVICE cpu
 ```
 
 ![Cats detected by RetinaNet R101](/images/detectron2_detected_cats.jpg)
@@ -555,13 +567,13 @@ The actual deployment process is described in
 <details>
 <summary>
 
-```console
-$ ./serverless/deploy_cpu.sh ./serverless/pytorch/facebookresearch/detectron2/retinanet/
+```bash
+./serverless/deploy_cpu.sh ./serverless/pytorch/facebookresearch/detectron2/retinanet/
 ```
 
 </summary>
 
-```console
+```
 21.07.21 15:20:31.011                     nuctl (I) Deploying function {"name": ""}
 21.07.21 15:20:31.011                     nuctl (I) Building {"versionInfo": "Label: 1.5.16, Git commit: ae43a6a560c2bec42d7ccfdf6e8e11a1e3cc3774, OS: linux, Arch: amd64, Go version: go1.14.3", "name": ""}
 21.07.21 15:20:31.407                     nuctl (I) Cleaning up before deployment {"functionName": "pth.facebookresearch.detectron2.retinanet_r101"}
@@ -671,8 +683,8 @@ After these changes deploy the serverless function once again. For
 `serverless/pytorch/facebookresearch/detectron2/retinanet/nuclio/` you should
 run the command below:
 
-```console
-$ serverless/deploy_cpu.sh serverless/pytorch/facebookresearch/detectron2/retinanet
+```bash
+serverless/deploy_cpu.sh serverless/pytorch/facebookresearch/detectron2/retinanet
 ```
 
 To debug python code inside a container you have to publish the port (in this
@@ -689,15 +701,15 @@ IP address of your host (usually IP address starts from `192.168.`). You will
 need to confirm that you want to connect to your host computer and enter your
 password. Keep the terminal open after that.
 
-```console
-$ docker exec -it nuclio-nuclio-pth.facebookresearch.detectron2.retinanet_r101 /bin/bash
-$ apt update && apt install -y ssh
-$ ssh -R 5678:localhost:5678 user@ipaddress
+```bash
+docker exec -it nuclio-nuclio-pth.facebookresearch.detectron2.retinanet_r101 /bin/bash
+apt update && apt install -y ssh
+ssh -R 5678:localhost:5678 user@ipaddress
 ```
 
 See how the latest command looks like in my case:
 
-```console
+```
 root@2d6cceec8f70:/opt/nuclio# ssh -R 5678:localhost:5678 nmanovic@192.168.50.188
 The authenticity of host '192.168.50.188 (192.168.50.188)' can't be established.
 ECDSA key fingerprint is SHA256:0sD6IWi+FKAhtUXr2TroHqyjcnYRIGLLx/wkGaZeRuo.
@@ -754,16 +766,20 @@ First of all need to check that you are using the recommended version of
 Nuclio framework. In my case it is `1.5.16` but you need to check [the
 installation manual][cvat-auto-annotation-guide].
 
-```console
-$ nuctl version
+```bash
+nuctl version
+```
+```
 Client version:
 "Label: 1.5.16, Git commit: ae43a6a560c2bec42d7ccfdf6e8e11a1e3cc3774, OS: linux, Arch: amd64, Go version: go1.14.3"
 ```
 
 Check that Nuclio dashboard is running and its version corresponds to `nuctl`.
 
-```console
-$ docker ps --filter NAME=^nuclio$
+```bash
+docker ps --filter NAME=^nuclio$
+```
+```
 CONTAINER ID   IMAGE                                   COMMAND                  CREATED       STATUS                    PORTS                                               NAMES
 7ab0c076c927   quay.io/nuclio/dashboard:1.5.16-amd64   "/docker-entrypoint.…"   6 weeks ago   Up 46 minutes (healthy)   80/tcp, 0.0.0.0:8070->8070/tcp, :::8070->8070/tcp   nuclio
 ```
@@ -771,20 +787,22 @@ CONTAINER ID   IMAGE                                   COMMAND                  
 Be sure that the model, which doesn't work, is healthy. In my case Inside Outside
 Guidance is not running.
 
-```console
-$ docker ps --filter NAME=iog
+```bash
+docker ps --filter NAME=iog
+```
+```
 CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
 ```
 
 Let's run it. Go to the root of CVAT repository and run the deploying command.
 
-```console
-$ serverless/deploy_cpu.sh serverless/pytorch/shiyinzhang/iog
+```bash
+serverless/deploy_cpu.sh serverless/pytorch/shiyinzhang/iog
 ```
 
 <details>
 
-```console
+```
 Deploying serverless/pytorch/shiyinzhang/iog function...
 21.07.06 12:49:08.763                     nuctl (I) Deploying function {"name": ""}
 21.07.06 12:49:08.763                     nuctl (I) Building {"versionInfo": "Label: 1.5.16, Git commit: ae43a6a560c2bec42d7ccfdf6e8e11a1e3cc3774, OS: linux, Arch: amd64, Go version: go1.14.3", "name": ""}
@@ -830,10 +848,16 @@ assigned by Nuclio. Now the port is used by `openvino-dextr` as we can
 see in logs. To prove our hypothesis just need to run a couple of docker
 commands:
 
-```console
-$ docker container ls -a | grep iog
+```bash
+docker container ls -a | grep iog
+```
+```
 eb0c1ee46630   cvat/pth.shiyinzhang.iog:latest                              "conda run -n iog pr…"   9 minutes ago       Created                                                                          nuclio-nuclio-pth.shiyinzhang.iog
-$ docker inspect eb0c1ee46630 | grep 49154
+```
+```bash
+docker inspect eb0c1ee46630 | grep 49154
+```
+```
             "Error": "driver failed programming external connectivity on endpoint nuclio-nuclio-pth.shiyinzhang.iog (02384290f91b2216162b1603322dadee426afe7f439d3d090f598af5d4863b2d): Bind for 0.0.0.0:49154 failed: port is already allocated",
                         "HostPort": "49154"
 ```
@@ -842,15 +866,19 @@ To solve the problem let's just remove the previous container for the function.
 In this case it is `eb0c1ee46630`. After that the deploying command works as
 expected.
 
-```console
-$ docker container rm eb0c1ee46630
+```bash
+docker container rm eb0c1ee46630
+```
+```
 eb0c1ee46630
-$ serverless/deploy_cpu.sh serverless/pytorch/shiyinzhang/iog
+```
+```bash
+serverless/deploy_cpu.sh serverless/pytorch/shiyinzhang/iog
 ```
 
 <details>
 
-```console
+```
 Deploying serverless/pytorch/shiyinzhang/iog function...
 21.07.06 13:09:52.934                     nuctl (I) Deploying function {"name": ""}
 21.07.06 13:09:52.934                     nuctl (I) Building {"versionInfo": "Label: 1.5.16, Git commit: ae43a6a560c2bec42d7ccfdf6e8e11a1e3cc3774, OS: linux, Arch: amd64, Go version: go1.14.3", "name": ""}
@@ -881,19 +909,27 @@ useful to look at logs. Just run a couple of commands like
 
 <details>
 
-```console
-$ docker logs cvat
+```bash
+docker logs cvat
+```
+```
 2021-07-06 13:44:54,699 DEBG 'runserver' stderr output:
-[Tue Jul 06 13:44:54.699431 2021] [wsgi:error] [pid 625:tid 140010969868032] [remote 172.28.0.3:40972] [2021-07-06 13:44:54,699] ERROR django.request: Internal Server Error: /api/v1/lambda/functions/pth.shiyinzhang.iog
+[Tue Jul 06 13:44:54.699431 2021] [wsgi:error] [pid 625:tid 140010969868032] [remote 172.28.0.3:40972] [2021-07-06 13:44:54,699] ERROR django.request: Internal Server Error: /api/lambda/functions/pth.shiyinzhang.iog
 
 2021-07-06 13:44:54,700 DEBG 'runserver' stderr output:
-[Tue Jul 06 13:44:54.699712 2021] [wsgi:error] [pid 625:tid 140010969868032] [remote 172.28.0.3:40972] ERROR - 2021-07-06 13:44:54,699 - log - Internal Server Error: /api/v1/lambda/functions/pth.shiyinzhang.iog
+[Tue Jul 06 13:44:54.699712 2021] [wsgi:error] [pid 625:tid 140010969868032] [remote 172.28.0.3:40972] ERROR - 2021-07-06 13:44:54,699 - log - Internal Server Error: /api/lambda/functions/pth.shiyinzhang.iog
 
-$ docker container ls --filter name=iog
+```
+```bash
+docker container ls --filter name=iog
+```
+```
 CONTAINER ID   IMAGE                             COMMAND                  CREATED       STATUS                 PORTS                                         NAMES
 3b6ef9a9f3e2   cvat/pth.shiyinzhang.iog:latest   "conda run -n iog pr…"   4 hours ago   Up 4 hours (healthy)   0.0.0.0:49159->8080/tcp, :::49159->8080/tcp   nuclio-nuclio-pth.shiyinzhang.iog
 
-$ docker logs nuclio-nuclio-pth.shiyinzhang.iog
+```
+```bash
+docker logs nuclio-nuclio-pth.shiyinzhang.iog
 ```
 
 </details>
@@ -940,14 +976,14 @@ you can use the Ubuntu subsystem, for this do the following:
 [opencv-python-github]: https://github.com/opencv/opencv-python
 [detectron2-tutorial]: https://detectron2.readthedocs.io/en/latest/tutorials/getting_started.html
 [retinanet-model-zoo]: https://github.com/facebookresearch/detectron2/blob/master/MODEL_ZOO.md#retinanet
-[faster-rcnn-function]: https://raw.githubusercontent.com/openvinotoolkit/cvat/38b774046d41d604ed85a521587e4bacce61b69c/serverless/tensorflow/faster_rcnn_inception_v2_coco/nuclio/function.yaml
+[faster-rcnn-function]: https://raw.githubusercontent.com/cvat-ai/cvat/38b774046d41d604ed85a521587e4bacce61b69c/serverless/tensorflow/faster_rcnn_inception_v2_coco/nuclio/function.yaml
 [nuclio-doc]: https://nuclio.io/docs/latest/reference/function-configuration/function-configuration-reference/
 [nuclio-http-trigger-doc]: https://nuclio.io/docs/latest/reference/triggers/http/
 [nuclio-bkms-doc]: https://nuclio.io/docs/latest/concepts/best-practices-and-common-pitfalls/
-[retinanet-function-yaml]: https://github.com/openvinotoolkit/cvat/blob/b2f616859ca64687c385e636b4a25014fbb9d17c/serverless/pytorch/facebookresearch/detectron2/retinanet/nuclio/function.yaml
-[retinanet-main-py]: https://github.com/openvinotoolkit/cvat/blob/b2f616859ca64687c385e636b4a25014fbb9d17c/serverless/pytorch/facebookresearch/detectron2/retinanet/nuclio/main.py
+[retinanet-function-yaml]: https://github.com/cvat-ai/cvat/blob/b2f616859ca64687c385e636b4a25014fbb9d17c/serverless/pytorch/facebookresearch/detectron2/retinanet/nuclio/function.yaml
+[retinanet-main-py]: https://github.com/cvat-ai/cvat/blob/b2f616859ca64687c385e636b4a25014fbb9d17c/serverless/pytorch/facebookresearch/detectron2/retinanet/nuclio/main.py
 [nuclio-homepage]: https://nuclio.io/
-[cvat-builtin-serverless]: https://github.com/openvinotoolkit/cvat/tree/develop/serverless
+[cvat-builtin-serverless]: https://github.com/cvat-ai/cvat/tree/develop/serverless
 [cvat-auto-annotation-guide]: /docs/administration/advanced/installation_automatic_annotation
 [cvat-installation-guide-windows-10]: /docs/administration/basics/installation/#windows-10
 [cvat-installation-guide-ubuntu-1804]: /docs/administration/basics/installation/#ubuntu-1804-x86_64amd64
@@ -955,8 +991,8 @@ you can use the Ubuntu subsystem, for this do the following:
 [pascal-voc-format]: http://host.robots.ox.ac.uk/pascal/VOC/voc2012/htmldoc/index.html
 [faas-wiki]: https://en.wikipedia.org/wiki/Function_as_a_service
 [cvat-ai-tools-user-guide]: /docs/manual/advanced/ai-tools/
-[cvat-github]: https://github.com/openvinotoolkit/cvat
-[siammask-serverless]: https://github.com/openvinotoolkit/cvat/tree/develop/serverless/pytorch/foolwood/siammask/nuclio
+[cvat-github]: https://github.com/cvat-ai/cvat
+[siammask-serverless]: https://github.com/cvat-ai/cvat/tree/develop/serverless/pytorch/foolwood/siammask/nuclio
 [vtest-avi]: https://github.com/opencv/opencv/blob/master/samples/data/vtest.avi?raw=true
 [intel-openvino-url]: https://software.intel.com/content/www/us/en/develop/tools/openvino-toolkit.html
 [cvat-auto-annotation-user-guide]: /docs/manual/advanced/automatic-annotation/

@@ -1,4 +1,4 @@
-// Copyright (C) 2020 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -9,7 +9,7 @@ import Modal from 'antd/lib/modal';
 
 import { ThunkDispatch } from 'utils/redux';
 import { modelsActions, startInferenceAsync } from 'actions/models-actions';
-import { Model, CombinedState } from 'reducers/interfaces';
+import { Model, CombinedState } from 'reducers';
 import DetectorRunner from './detector-runner';
 
 interface StateToProps {
@@ -29,8 +29,8 @@ function mapStateToProps(state: CombinedState): StateToProps {
     const { detectors, reid } = models;
 
     return {
-        visible: models.visibleRunWindows,
-        task: models.activeRunTask,
+        visible: models.modelRunnerIsVisible,
+        task: models.modelRunnerTask,
         reid,
         detectors,
     };
@@ -38,8 +38,8 @@ function mapStateToProps(state: CombinedState): StateToProps {
 
 function mapDispatchToProps(dispatch: ThunkDispatch): DispatchToProps {
     return {
-        runInference(task: any, model: Model, body: object) {
-            dispatch(startInferenceAsync(task, model, body));
+        runInference(taskID: number, model: Model, body: object) {
+            dispatch(startInferenceAsync(taskID, model, body));
         },
         closeDialog() {
             dispatch(modelsActions.closeRunModelDialog());
@@ -63,15 +63,18 @@ function ModelRunnerDialog(props: StateToProps & DispatchToProps): JSX.Element {
             maskClosable
             title='Automatic annotation'
         >
-            <DetectorRunner
-                withCleanup
-                models={models}
-                task={task}
-                runInference={(...args) => {
-                    closeDialog();
-                    runInference(...args);
-                }}
-            />
+            { task ? (
+                <DetectorRunner
+                    withCleanup
+                    models={models}
+                    labels={task.labels}
+                    dimension={task.dimension}
+                    runInference={(...args) => {
+                        closeDialog();
+                        runInference(task.id, ...args);
+                    }}
+                />
+            ) : null }
         </Modal>
     );
 }

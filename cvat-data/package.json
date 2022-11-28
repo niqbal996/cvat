@@ -2,13 +2,15 @@
   "name": "cvat-data",
   "version": "1.0.2",
   "description": "",
-  "main": "src/js/cvat-data.js",
+  "main": "src/ts/cvat-data.ts",
   "scripts": {
-    "patch": "cd src/js && patch --dry-run --forward -p0 < 3rdparty_patch.diff >> /dev/null && patch -p0 < 3rdparty_patch.diff; true",
-    "build": "npm run patch; webpack --config ./webpack.config.js",
-    "server": "npm run patch; nodemon --watch config --exec 'webpack-dev-server --config ./webpack.config.js --mode=development --open'"
+    "patch": "cd src/ts && patch --dry-run --forward -p0 < 3rdparty_patch.diff >> /dev/null && patch -p0 < 3rdparty_patch.diff; true",
+    "build": "yarn run patch; webpack --config ./webpack.config.js",
+    "server": "yarn run patch; nodemon --watch config --exec 'webpack-dev-server --config ./webpack.config.js --mode=development --open'",
+    "type-check": "tsc --noEmit",
+    "type-check:watch": "yarn run type-check --watch"
   },
-  "author": "Intel",
+  "author": "CVAT.ai",
   "license": "MIT",
   "browserslist": [
     "Chrome >= 63",
@@ -16,25 +18,9 @@
     "not IE 11",
     "> 2%"
   ],
-  "devDependencies": {
-    "@babel/cli": "^7.13.16",
-    "@babel/core": "^7.4.4",
-    "@babel/preset-env": "^7.4.4",
-    "babel-loader": "^8.0.6",
-    "copy-webpack-plugin": "^7.0.0",
-    "eslint": "^6.4.0",
-    "eslint-config-airbnb-base": "^14.0.0",
-    "eslint-plugin-import": "^2.18.2",
-    "eslint-plugin-no-unsafe-innerhtml": "^1.0.16",
-    "eslint-plugin-no-unsanitized": "^3.0.2",
-    "eslint-plugin-security": "^1.4.0",
-    "nodemon": "^1.19.2",
-    "webpack": "^5.20.2",
-    "webpack-cli": "^3.3.7",
-    "worker-loader": "^2.0.0"
-  },
+  "devDependencies": {},
   "dependencies": {
-    "async-mutex": "^0.3.2",
-    "jszip": "3.7.1"
+    "async-mutex": "^0.4.0",
+    "jszip": "3.10.1"
   }
 }

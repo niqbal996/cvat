@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -15,7 +15,7 @@ context('Drawing with predefined number of points.', () => {
     const createPolygonShape = {
         reDraw: false,
         type: 'Shape',
-        labelName: labelName,
+        labelName,
         pointsMap: [
             { x: 500, y: 100 },
             { x: 600, y: 100 },
@@ -25,7 +25,7 @@ context('Drawing with predefined number of points.', () => {
     };
     const createPolylinesShape = {
         type: 'Shape',
-        labelName: labelName,
+        labelName,
         pointsMap: [
             { x: 500, y: 250 },
             { x: 600, y: 250 },
@@ -34,7 +34,7 @@ context('Drawing with predefined number of points.', () => {
     };
     const createPointsShape = {
         type: 'Shape',
-        labelName: labelName,
+        labelName,
         pointsMap: [{ x: 500, y: 200 }],
         numberOfPoints: 1,
     };
@@ -44,21 +44,21 @@ context('Drawing with predefined number of points.', () => {
     });
 
     function tryDrawObjectPredefinedNumberPoints(object, pointsCount) {
-        cy.get(`.cvat-draw-${object}-control`).click().wait(500);
-        cy.get('.cvat-draw-shape-popover')
-            .not('.ant-popover-hidden')
+        cy.get(`.cvat-draw-${object}-control`).click();
+        cy.get(`.cvat-draw-${object}-popover`)
+            .should('be.visible')
             .within(() => {
                 cy.get('.cvat-draw-shape-popover-points-selector')
                     .type(`${pointsCount - 1}`)
                     .focused()
-                    .tab();
+                    .blur();
                 cy.get('[role="spinbutton"]').should('have.attr', 'aria-valuenow', pointsCount);
             });
     }
 
     function tryDeletePoint() {
-        let svgJsCircleId = [];
-        cy.get('#cvat_canvas_shape_1').trigger('mousemove', { force: true }).should('have.attr', 'fill-opacity', 0.3);
+        const svgJsCircleId = [];
+        cy.get('#cvat_canvas_shape_1').trigger('mousemove', { force: true }).should('have.class', 'cvat_canvas_shape_activated');
         cy.get('circle').then((circle) => {
             for (let i = 0; i < circle.length; i++) {
                 if (circle[i].id.match(/^SvgjsCircle\d+$/)) {

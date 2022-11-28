@@ -1,7 +1,7 @@
 ---
 title: 'Top Panel'
 linkTitle: 'Top Panel'
-weight: 7
+weight: 9
 description: 'Overview of controls available on the top panel of the annotation tool.'
 ---
 
@@ -17,18 +17,19 @@ It is the main menu of the annotation tool. It can be used to download, upload a
 
 Button assignment:
 
-- `Dump Annotations` — downloads annotations from a task.
 - `Upload Annotations` — uploads annotations into a task.
-- `Remove Annotations` — removes annotations from the current job.
-- `Export as a dataset` — download a data set from a task. Several formats are available:
-  - [Datumaro](https://github.com/openvinotoolkit/cvat/tree/develop/cvat/apps/dataset_manager/formats/datumaro)
-  - [Pascal VOC 2012](http://host.robots.ox.ac.uk/pascal/VOC/)
-  - [MS COCO](http://cocodataset.org/#format-data)
-  - [YOLO](https://pjreddie.com/darknet/yolo/)
+- `Export as a dataset` — download a data set from a task in one of the [supported formats](/docs/manual/advanced/formats/).
+  You can also enter a `Custom name` and enable the `Save images` checkbox if you want the dataset to contain images.
+- `Remove Annotations` — calls the confirmation window if you click `Delete`, the annotation of the current job
+  will be removed, if you click `Select range` you can remove annotation on range frames, if you activate checkbox
+  `Delete only keyframe for tracks` then only keyframes will be deleted from the tracks, on the selected range.
+
+  ![](/images/image229.jpg)
+
 - `Open the task` — opens a page with details about the task.
-- `Request a review` - calls up the form to submit the job for a review, read more in the [review](/docs/manual/advanced/review/) section.
-- `Finish the job` - changes the status of the job to `completed` and returns to the task page without review.
-- `Submit the review` - (available during the review) calls up the form to submit a review, read more in the [review](/docs/manual/advanced/review/) section.
+- `Change job state` - changes the state of the job (`new`, `in progress`, `rejected`, `completed`).
+- `Finish the job`/`Renew the job` - changes the job stage and state
+  to `acceptance` and `completed` / `annotation` and `new` correspondingly.
 
 ## Save Work
 
@@ -56,7 +57,7 @@ Used to complete the creation of the object. This button appears only when the o
 
 ![](/images/image226.jpg)
 
-Used to pause automatic line creation when drawing a polygon with 
+Used to pause automatic line creation when drawing a polygon with
 [OpenCV Intelligent scissors](/docs/manual/advanced/opencv-tools/#intelligent-scissors).
 Also used to postpone server requests when creating an object using [AI Tools](/docs/manual/advanced/ai-tools/).
 When blocking is activated, the button turns blue.

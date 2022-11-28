@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -13,6 +13,8 @@ const {
     jobAnnotationsDummyData,
     frameMetaDummyData,
     cloudStoragesDummyData,
+    webhooksDummyData,
+    webhooksEventsDummyData,
 } = require('./dummy-data.mock');
 
 function QueryStringToJSON(query, ignoreList = []) {
@@ -76,7 +78,7 @@ class ServerProxy {
         }
 
         async function getProjects(filter = '') {
-            const queries = QueryStringToJSON(filter, ['without_tasks']);
+            const queries = QueryStringToJSON(filter);
             const result = projectsDummyData.results.filter((x) => {
                 for (const key in queries) {
                     if (Object.prototype.hasOwnProperty.call(queries, key)) {
@@ -97,8 +99,8 @@ class ServerProxy {
             const object = projectsDummyData.results.filter((project) => project.id === id)[0];
             for (const prop in projectData) {
                 if (
-                    Object.prototype.hasOwnProperty.call(projectData, prop)
-                    && Object.prototype.hasOwnProperty.call(object, prop)
+                    Object.prototype.hasOwnProperty.call(projectData, prop) &&
+                    Object.prototype.hasOwnProperty.call(object, prop)
                 ) {
                     if (prop === 'labels') {
                         object[prop] = projectData[prop].filter((label) => !label.deleted);
@@ -113,7 +115,7 @@ class ServerProxy {
             const id = Math.max(...projectsDummyData.results.map((el) => el.id)) + 1;
             projectsDummyData.results.push({
                 id,
-                url: `http://localhost:7000/api/v1/projects/${id}`,
+                url: `http://localhost:7000/api/projects/${id}`,
                 name: projectData.name,
                 owner: 1,
                 assignee: null,
@@ -160,8 +162,8 @@ class ServerProxy {
             const object = tasksDummyData.results.filter((task) => task.id === id)[0];
             for (const prop in taskData) {
                 if (
-                    Object.prototype.hasOwnProperty.call(taskData, prop)
-                    && Object.prototype.hasOwnProperty.call(object, prop)
+                    Object.prototype.hasOwnProperty.call(taskData, prop) &&
+                    Object.prototype.hasOwnProperty.call(object, prop)
                 ) {
                     if (prop === 'labels') {
                         object[prop] = taskData[prop].filter((label) => !label.deleted);
@@ -170,13 +172,16 @@ class ServerProxy {
                     }
                 }
             }
+
+            const [updatedTask] = await getTasks({ id });
+            return updatedTask;
         }
 
         async function createTask(taskData) {
             const id = Math.max(...tasksDummyData.results.map((el) => el.id)) + 1;
             tasksDummyData.results.push({
                 id,
-                url: `http://localhost:7000/api/v1/tasks/${id}`,
+                url: `http://localhost:7000/api/tasks/${id}`,
                 name: taskData.name,
                 project_id: taskData.project_id || null,
                 size: 5000,
@@ -209,7 +214,8 @@ class ServerProxy {
             }
         }
 
-        async function getJob(jobID) {
+        async function getJobs(filter = {}) {
+            const id = filter.id || null;
             const jobs = tasksDummyData.results
                 .reduce((acc, task) => {
                     for (const segment of task.segments) {
@@ -218,6 +224,12 @@ class ServerProxy {
                             copy.start_frame = segment.start_frame;
                             copy.stop_frame = segment.stop_frame;
                             copy.task_id = task.id;
+                            copy.dimension = task.dimension;
+                            copy.data_compressed_chunk_type = task.data_compressed_chunk_type;
+                            copy.data_chunk_size = task.data_chunk_size;
+                            copy.bug_tracker = task.bug_tracker;
+                            copy.mode = task.mode;
+                            copy.labels = task.labels;
 
                             acc.push(copy);
                         }
@@ -225,7 +237,7 @@ class ServerProxy {
 
                     return acc;
                 }, [])
-                .filter((job) => job.id === jobID);
+                .filter((job) => job.id === id);
 
             return (
                 jobs[0] || {
@@ -249,12 +261,14 @@ class ServerProxy {
 
             for (const prop in jobData) {
                 if (
-                    Object.prototype.hasOwnProperty.call(jobData, prop)
-                    && Object.prototype.hasOwnProperty.call(object, prop)
+                    Object.prototype.hasOwnProperty.call(jobData, prop) &&
+                    Object.prototype.hasOwnProperty.call(object, prop)
                 ) {
                     object[prop] = jobData[prop];
                 }
             }
+
+            return getJobs({ id });
         }
 
         async function getUsers() {
@@ -273,8 +287,33 @@ class ServerProxy {
             return 'DUMMY_IMAGE';
         }
 
-        async function getMeta(tid) {
-            return JSON.parse(JSON.stringify(frameMetaDummyData[tid]));
+        async function getMeta(session, jid) {
+            if (session !== 'job') {
+                throw new Error('not implemented test');
+            }
+
+            return JSON.parse(JSON.stringify(frameMetaDummyData[jid]));
+        }
+
+        async function saveMeta(session, jid, meta) {
+            if (session !== 'job') {
+                throw new Error('not implemented test');
+            }
+            const object = frameMetaDummyData[jid];
+            for (const prop in meta) {
+                if (
+                    Object.prototype.hasOwnProperty.call(meta, prop) &&
+                    Object.prototype.hasOwnProperty.call(object, prop)
+                ) {
+                    if (prop === 'labels') {
+                        object[prop] = meta[prop].filter((label) => !label.deleted);
+                    } else {
+                        object[prop] = meta[prop];
+                    }
+                }
+            }
+
+            return getMeta(jid);
         }
 
         async function getAnnotations(session, id) {
@@ -339,8 +378,8 @@ class ServerProxy {
             if (cloudStorage) {
                 for (const prop in cloudStorageData) {
                     if (
-                        Object.prototype.hasOwnProperty.call(cloudStorageData, prop)
-                            && Object.prototype.hasOwnProperty.call(cloudStorage, prop)
+                        Object.prototype.hasOwnProperty.call(cloudStorageData, prop) &&
+                            Object.prototype.hasOwnProperty.call(cloudStorage, prop)
                     ) {
                         cloudStorage[prop] = cloudStorageData[prop];
                     }
@@ -375,6 +414,70 @@ class ServerProxy {
             }
         }
 
+        async function getWebhooks(filter = '') {
+            const queries = QueryStringToJSON(filter);
+            const result = webhooksDummyData.results.filter((item) => {
+                for (const key in queries) {
+                    if (Object.prototype.hasOwnProperty.call(queries, key)) {
+                        if (queries[key] !== item[key]) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            });
+            return result;
+        }
+
+        async function createWebhook(webhookData) {
+            const id = Math.max(...webhooksDummyData.results.map((item) => item.id)) + 1;
+            webhooksDummyData.results.push({
+                id,
+                description: webhookData.description,
+                target_url: webhookData.target_url,
+                content_type: webhookData.content_type,
+                secret: webhookData.secret,
+                enable_ssl: webhookData.enable_ssl,
+                is_active: webhookData.is_active,
+                events: webhookData.events,
+                organization_id: webhookData.organization_id ? webhookData.organization_id : null,
+                project_id: webhookData.project_id ? webhookData.project_id : null,
+                type: webhookData.type,
+                owner: { id: 1 },
+                created_date: '2022-09-23T06:29:12.337276Z',
+                updated_date: '2022-09-23T06:29:12.337276Z',
+            });
+
+            const result = await getWebhooks(`?id=${id}`);
+            return result[0];
+        }
+
+        async function updateWebhook(webhookID, webhookData) {
+            const webhook = webhooksDummyData.results.find((item) => item.id === webhookID);
+            if (webhook) {
+                for (const prop in webhookData) {
+                    if (
+                        Object.prototype.hasOwnProperty.call(webhookData, prop) &&
+                            Object.prototype.hasOwnProperty.call(webhook, prop)
+                    ) {
+                        webhook[prop] = webhookData[prop];
+                    }
+                }
+            }
+            return webhook;
+        }
+
+        async function receiveWebhookEvents(type) {
+            return webhooksEventsDummyData[type]?.events;
+        }
+
+        async function deleteWebhook(webhookID) {
+            const webhooks = webhooksDummyData.results;
+            const webhookIdx = webhooks.findIndex((item) => item.id === webhookID);
+            if (webhookIdx !== -1) {
+                webhooks.splice(webhookIdx);
+            }
+        }
 
         Object.defineProperties(
             this,
@@ -403,17 +506,17 @@ class ServerProxy {
 
                 tasks: {
                     value: Object.freeze({
-                        getTasks,
-                        saveTask,
-                        createTask,
-                        deleteTask,
+                        get: getTasks,
+                        save: saveTask,
+                        create: createTask,
+                        delete: deleteTask,
                     }),
                     writable: false,
                 },
 
                 jobs: {
                     value: Object.freeze({
-                        get: getJob,
+                        get: getJobs,
                         save: saveJob,
                     }),
                     writable: false,
@@ -431,6 +534,7 @@ class ServerProxy {
                     value: Object.freeze({
                         getData,
                         getMeta,
+                        saveMeta,
                         getPreview,
                     }),
                     writable: false,
@@ -449,6 +553,17 @@ class ServerProxy {
                         update: updateCloudStorage,
                         create: createCloudStorage,
                         delete: deleteCloudStorage,
+                    }),
+                    writable: false,
+                },
+
+                webhooks: {
+                    value: Object.freeze({
+                        get: getWebhooks,
+                        create: createWebhook,
+                        update: updateWebhook,
+                        delete: deleteWebhook,
+                        events: receiveWebhookEvents,
                     }),
                     writable: false,
                 },

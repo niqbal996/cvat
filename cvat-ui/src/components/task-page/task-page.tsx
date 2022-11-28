@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -13,15 +13,16 @@ import Result from 'antd/lib/result';
 import DetailsContainer from 'containers/task-page/details';
 import JobListContainer from 'containers/task-page/job-list';
 import ModelRunnerModal from 'components/model-runner-modal/model-runner-dialog';
+import CVATLoadingSpinner from 'components/common/loading-spinner';
 import MoveTaskModal from 'components/move-task-modal/move-task-modal';
-import ExportDatasetModal from 'components/export-dataset/export-dataset-modal';
-import { Task } from 'reducers/interfaces';
+import { Task } from 'reducers';
 import TopBarComponent from './top-bar';
 
 interface TaskPageComponentProps {
     task: Task | null | undefined;
     fetching: boolean;
     updating: boolean;
+    jobUpdating: boolean;
     deleteActivity: boolean | null;
     installedGit: boolean;
     getTask: () => void;
@@ -38,12 +39,13 @@ class TaskPageComponent extends React.PureComponent<Props> {
         }
     }
 
-    public componentDidUpdate(): void {
+    public componentDidUpdate(prevProps: Props): void {
         const {
-            deleteActivity, history, task, fetching, getTask,
+            deleteActivity, history, task, fetching, getTask, jobUpdating,
         } = this.props;
 
-        if (task === null && !fetching) {
+        const jobUpdated = prevProps.jobUpdating && !jobUpdating;
+        if ((task === null && !fetching) || jobUpdated) {
             getTask();
         }
 
@@ -53,9 +55,9 @@ class TaskPageComponent extends React.PureComponent<Props> {
     }
 
     public render(): JSX.Element {
-        const { task, updating } = this.props;
+        const { task, updating, fetching } = this.props;
 
-        if (task === null) {
+        if (task === null || (fetching && !updating)) {
             return <Spin size='large' className='cvat-spinner' />;
         }
 
@@ -71,9 +73,9 @@ class TaskPageComponent extends React.PureComponent<Props> {
         }
 
         return (
-            <>
+            <div className='cvat-task-page'>
+                { updating ? <CVATLoadingSpinner size='large' /> : null }
                 <Row
-                    style={{ display: updating ? 'none' : undefined }}
                     justify='center'
                     align='top'
                     className='cvat-task-details-wrapper'
@@ -86,9 +88,7 @@ class TaskPageComponent extends React.PureComponent<Props> {
                 </Row>
                 <ModelRunnerModal />
                 <MoveTaskModal />
-                <ExportDatasetModal />
-                {updating && <Spin size='large' className='cvat-spinner' />}
-            </>
+            </div>
         );
     }
 }

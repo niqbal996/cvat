@@ -1,12 +1,12 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
-import getCore from 'cvat-core-wrapper';
-import waitFor from '../wait-for';
+import { getCore } from 'cvat-core-wrapper';
 import HistogramEqualizationImplementation, { HistogramEqualization } from './histogram-equalization';
-
+import TrackerMImplementation from './tracker-mil';
 import IntelligentScissorsImplementation, { IntelligentScissors } from './intelligent-scissors';
+import { OpenCVTracker } from './opencv-interfaces';
 
 const core = getCore();
 const baseURL = core.config.backendAPI.slice(0, -7);
@@ -23,16 +23,24 @@ export interface ImgProc {
     hist: () => HistogramEqualization;
 }
 
+export interface Tracking {
+    trackerMIL: OpenCVTracker;
+}
+
 export class OpenCVWrapper {
     private initialized: boolean;
     private cv: any;
+    private onProgress: ((percent: number) => void) | null;
+    private injectionProcess: Promise<void> | null;
 
     public constructor() {
         this.initialized = false;
         this.cv = null;
+        this.onProgress = null;
+        this.injectionProcess = null;
     }
 
-    public async initialize(onProgress: (percent: number) => void): Promise<void> {
+    private async inject(): Promise<void> {
         const response = await fetch(`${baseURL}/opencv/opencv.js`);
         if (response.status !== 200) {
             throw new Error(`Response status ${response.status}. ${response.statusText}`);
@@ -63,7 +71,7 @@ export class OpenCVWrapper {
                 // Cypress workaround: content-length is always zero in cypress, it is done optional here
                 // Just progress bar will be disabled
                 const percentage = contentLength ? (receivedLength * 100) / +(contentLength as string) : 0;
-                onProgress(+percentage.toFixed(0));
+                if (this.onProgress) this.onProgress(+percentage.toFixed(0));
             }
         }
 
@@ -73,18 +81,32 @@ export class OpenCVWrapper {
         OpenCVConstructor();
 
         const global = window as any;
-        await waitFor(
-            100,
-            () =>
-                typeof global.cv !== 'undefined' && typeof global.cv.segmentation_IntelligentScissorsMB !== 'undefined',
-        );
 
-        this.cv = global.cv;
+        this.cv = await global.cv;
+    }
+
+    public async initialize(onProgress: (percent: number) => void): Promise<void> {
+        this.onProgress = onProgress;
+
+        if (!this.injectionProcess) {
+            this.injectionProcess = this.inject();
+        }
+        await this.injectionProcess;
+
+        this.injectionProcess = null;
         this.initialized = true;
+    }
+
+    public removeProgressCallback(): void {
+        this.onProgress = null;
     }
 
     public get isInitialized(): boolean {
         return this.initialized;
+    }
+
+    public get initializationInProgress(): boolean {
+        return !!this.injectionProcess;
     }
 
     public get contours(): Contours {
@@ -126,8 +148,9 @@ export class OpenCVWrapper {
         }
 
         return {
-            intelligentScissorsFactory: (onChangeToolsBlockerState:(event:string)=>void) =>
-                new IntelligentScissorsImplementation(this.cv, onChangeToolsBlockerState),
+            intelligentScissorsFactory:
+            (onChangeToolsBlockerState:
+            (event:string)=>void) => new IntelligentScissorsImplementation(this.cv, onChangeToolsBlockerState),
         };
     }
 
@@ -137,6 +160,20 @@ export class OpenCVWrapper {
         }
         return {
             hist: () => new HistogramEqualizationImplementation(this.cv),
+        };
+    }
+
+    public get tracking(): Tracking {
+        if (!this.initialized) {
+            throw new Error('Need to initialize OpenCV first');
+        }
+        return {
+            trackerMIL: {
+                model: () => new TrackerMImplementation(this.cv),
+                name: 'TrackerMIL',
+                description: 'Light client-side model useful to track simple objects',
+                type: 'opencv_tracker_mil',
+            },
         };
     }
 }

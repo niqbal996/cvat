@@ -4,8 +4,8 @@
 
 title: 'Installation Analytics'
 linkTitle: 'Installation Analytics'
-weight: 2
-description: 'Instructions for deployment and customization of Analytics. This section on [GitHub](https://github.com/openvinotoolkit/cvat/tree/develop/components/analytics).'
+weight: 20
+description: 'Instructions for deployment and customization of Analytics. This section on [GitHub](https://github.com/cvat-ai/cvat/tree/develop/components/analytics).'
 
 ---
 
@@ -33,12 +33,14 @@ At the moment it is not possible to save advanced settings. Below values should 
 
 ## Time picker default
 
+```json
 {
 "from": "now/d",
 "to": "now/d",
 "display": "Today",
 "section": 0
 }
+```
 
 ## Time picker quick ranges
 

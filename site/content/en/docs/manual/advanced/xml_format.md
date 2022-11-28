@@ -1,7 +1,7 @@
 ---
 title: 'XML annotation format'
 linkTitle: 'XML annotation format'
-weight: 21
+weight: 22
 ---
 
 <!--lint disable heading-style-->
@@ -38,6 +38,7 @@ In annotation mode each image tag has `width` and `height` attributes for the sa
       <labels>
         <label>
           <name>String: name of the label (e.g. car, person)</name>
+          <type>String: any, bbox, cuboid, cuboid_3d, ellipse, polygon, polyline, points, skeleton, tag</type>
           <attributes>
             <attribute>
               <name>String: attribute name</name>
@@ -49,6 +50,8 @@ ex. value 2
 ex. value 3</values>
             </attribute>
           </attributes>
+          <svg>String: label representation in svg, only for skeletons</svg>
+          <parent>String: label parent name, only for skeletons</parent>
         </label>
       </labels>
       <segments>
@@ -81,7 +84,7 @@ On each image it is possible to have many different objects. Each object can hav
 If an annotation task is created with `z_order` flag then each object will have `z_order` attribute which is used
 to draw objects properly when they are intersected (if `z_order` is bigger the object is closer to camera).
 In previous versions of the format only `box` shape was available.
-In later releases `polygon`, `polyline`, and `points` were added. Please see below for more details:
+In later releases `polygon`, `polyline`, `points`, `skeletons` and `tags` were added. Please see below for more details:
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -113,6 +116,18 @@ In later releases `polygon`, `polyline`, and `points` were added. Please see bel
       <attribute name="String: an attribute name">String: the attribute value</attribute>
       ...
     </points>
+    <tag label="String: the associated label" source="manual or auto">
+      <attribute name="String: an attribute name">String: the attribute value</attribute>
+      ...
+    </tag>
+    <skeleton label="String: the associated label" occluded="Number: 0 - False, 1 - True" z_order="Number: z-order of the object">
+      <points label="String: the associated label" occluded="Number: 0 - False, 1 - True" outside="Number: 0 - False, 1 - True" points="x0,y0;x1,y1" z_order="0">
+        <attribute name="String: an attribute name">String: the attribute value</attribute>
+      </points>
+      ...
+      <attribute name="String: an attribute name">String: the attribute value</attribute>
+      ...
+    </skeleton>
     ...
   </image>
   ...
@@ -157,6 +172,34 @@ Example:
           <attributes>
           </attributes>
         </label>
+        <label>
+          <name>s1</name>
+          <type>skeleton</type>
+          <attributes>
+          </attributes>
+          <svg>&lt;line x1="36.87290954589844" y1="47.732025146484375" x2="86.87290954589844" y2="10.775501251220703" stroke="black" data-type="edge" data-node-from="2" stroke-width="0.5" data-node-to="3"&gt;&lt;/line&gt;&lt;line x1="25.167224884033203" y1="22.64841079711914" x2="36.87290954589844" y2="47.732025146484375" stroke="black" data-type="edge" data-node-from="1" stroke-width="0.5" data-node-to="2"&gt;&lt;/line&gt;&lt;circle r="1.5" stroke="black" fill="#b3b3b3" cx="25.167224884033203" cy="22.64841079711914" stroke-width="0.1" data-type="element node" data-element-id="1" data-node-id="1" data-label-name="1"&gt;&lt;/circle&gt;&lt;circle r="1.5" stroke="black" fill="#b3b3b3" cx="36.87290954589844" cy="47.732025146484375" stroke-width="0.1" data-type="element node" data-element-id="2" data-node-id="2" data-label-name="2"&gt;&lt;/circle&gt;&lt;circle r="1.5" stroke="black" fill="#b3b3b3" cx="86.87290954589844" cy="10.775501251220703" stroke-width="0.1" data-type="element node" data-element-id="3" data-node-id="3" data-label-name="3"&gt;&lt;/circle&gt;</svg>
+        </label>
+        <label>
+          <name>1</name>
+          <type>points</type>
+          <attributes>
+          </attributes>
+          <parent>s1</parent>
+        </label>
+        <label>
+          <name>2</name>
+          <type>points</type>
+          <attributes>
+          </attributes>
+          <parent>s1</parent>
+        </label>
+        <label>
+          <name>3</name>
+          <type>points</type>
+          <attributes>
+          </attributes>
+          <parent>s1</parent>
+        </label>
       </labels>
       <segments>
         <segment>
@@ -184,6 +227,16 @@ Example:
     </polyline>
     <points label="wheel" points="574.90,939.48;1170.16,907.90;1130.69,445.26;600.16,459.48" occluded="0" z_order="5">
     </points>
+    <tag label="good_frame" source="manual">
+    </tag>
+    <skeleton label="s1" occluded="0" source="manual" points="" rotation="0.00" z_order="0">
+      <points label="1" occluded="0" source="manual" outside="0" points="54.47,94.81" z_order="0">
+      </points>
+      <points label="2" occluded="0" source="manual" outside="0" points="68.02,162.34" z_order="0">
+      </points>
+      <points label="3" occluded="0" source="manual" outside="0" points="125.87,62.85" z_order="0">
+      </points>
+    </skeleton>
   </image>
 </annotations>
 ```
@@ -200,7 +253,7 @@ cloned for each location (a known redundancy).
 <?xml version="1.0" encoding="utf-8"?>
 <annotations>
   ...
-  <track id="Number: id of the track (doesn't have any special meeting" label="String: the associated label">
+  <track id="Number: id of the track (doesn't have any special meeting)" label="String: the associated label" source="manual or auto">
     <box frame="Number: frame" xtl="Number: float" ytl="Number: float" xbr="Number: float" ybr="Number: float" outside="Number: 0 - False, 1 - True" occluded="Number: 0 - False, 1 - True" keyframe="Number: 0 - False, 1 - True">
       <attribute name="String: an attribute name">String: the attribute value</attribute>
       ...
@@ -214,6 +267,17 @@ cloned for each location (a known redundancy).
     <points frame="Number: frame" points="x0,y0;x1,y1;..." outside="Number: 0 - False, 1 - True" occluded="Number: 0 - False, 1 - True" keyframe="Number: 0 - False, 1 - True">
       <attribute name="String: an attribute name">String: the attribute value</attribute>
     </points>
+    ...
+  </track>
+  <track id="Number: id of the track (doesn't have any special meeting)" label="String: the associated label" source="manual or auto">
+    <skeleton frame="Number: frame" outside="Number: 0 - False, 1 - True" occluded="Number: 0 - False, 1 - True" keyframe="Number: 0 - False, 1 - True">
+    </skeleton>
+    ...
+    <track id="Number: id of the track (doesn't have any special meeting)" label="String: the associated label" source="manual or auto">
+      <points frame="Number: frame" outside="Number: 0 - False, 1 - True" occluded="Number: 0 - False, 1 - True" keyframe="Number: 0 - False, 1 - True" points="x0,y0;x1,y1">
+      </points>
+      ...
+    </track>
     ...
   </track>
   ...
@@ -247,6 +311,34 @@ Example:
           <name>car</name>
           <attributes>
           </attributes>
+        </label>
+        <label>
+          <name>s1</name>
+          <type>skeleton</type>
+          <attributes>
+          </attributes>
+          <svg>&lt;line x1="36.87290954589844" y1="47.732025146484375" x2="86.87290954589844" y2="10.775501251220703" stroke="black" data-type="edge" data-node-from="2" stroke-width="0.5" data-node-to="3"&gt;&lt;/line&gt;&lt;line x1="25.167224884033203" y1="22.64841079711914" x2="36.87290954589844" y2="47.732025146484375" stroke="black" data-type="edge" data-node-from="1" stroke-width="0.5" data-node-to="2"&gt;&lt;/line&gt;&lt;circle r="1.5" stroke="black" fill="#b3b3b3" cx="25.167224884033203" cy="22.64841079711914" stroke-width="0.1" data-type="element node" data-element-id="1" data-node-id="1" data-label-name="1"&gt;&lt;/circle&gt;&lt;circle r="1.5" stroke="black" fill="#b3b3b3" cx="36.87290954589844" cy="47.732025146484375" stroke-width="0.1" data-type="element node" data-element-id="2" data-node-id="2" data-label-name="2"&gt;&lt;/circle&gt;&lt;circle r="1.5" stroke="black" fill="#b3b3b3" cx="86.87290954589844" cy="10.775501251220703" stroke-width="0.1" data-type="element node" data-element-id="3" data-node-id="3" data-label-name="3"&gt;&lt;/circle&gt;</svg>
+        </label>
+        <label>
+          <name>1</name>
+          <type>points</type>
+          <attributes>
+          </attributes>
+          <parent>s1</parent>
+        </label>
+        <label>
+          <name>2</name>
+          <type>points</type>
+          <attributes>
+          </attributes>
+          <parent>s1</parent>
+        </label>
+        <label>
+          <name>3</name>
+          <type>points</type>
+          <attributes>
+          </attributes>
+          <parent>s1</parent>
         </label>
       </labels>
       <segments>
@@ -282,225 +374,61 @@ Example:
     <polygon frame="14" points="313.74,233.16;331.11,220.00;359.53,243.16;333.21,283.16;287.95,274.74" outside="1" occluded="0" keyframe="1">
     </polygon>
   </track>
-</annotations>
-```
-
-## Version 1
-
-There are two different formats for images and video tasks at the moment.
-Both formats has a common part which is described below:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<annotations>
-  <version>1.0</version>
-  <meta>
-    <task>
-      <id>Number: id of the task</id>
-      <name>String: some task name</name>
-      <size>Number: count of frames/images in the task</size>
-      <mode>String: interpolation or annotation</mode>
-      <overlap>Number: number of overlapped frames between segments</overlap>
-      <bugtracker>String: URL on an page which describe the task</bugtracker>
-      <created>String: date when the task was created</created>
-      <updated>String: date when the task was updated</updated>
-      <labels>
-        <label>
-          <name>String: name of the label (e.g. car, person)</name>
-          <attributes>
-            <attribute>String: attributes for the label (e.g. @select=quality:good,bad)</attribute>
-          </attributes>
-        </label>
-      </labels>
-      <segments>
-        <segment>
-          <id>Number: id of the segment</id>
-          <start>Number: first frame</start>
-          <stop>Number: last frame</stop>
-          <url>String: URL (e.g. http://cvat.example.com/?id=213)</url>
-        </segment>
-      </segments>
-      <owner>
-        <username>String: the author of the task</username>
-        <email>String: email of the author</email>
-      </owner>
-    </task>
-    <dumped>String: date when the annotation was dumped</dumped>
-  </meta>
-  ...
-</annotations>
-```
-
-### Annotation
-
-Below you can find description of the data format for images tasks.
-
-On each image it is possible to have many different objects. Each object can have multiple attributes.
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<annotations>
-  ...
-  <image id="Number: id of the image (the index in lexical order of images)" name="String: path to the image">
-    <box label="String: the associated label" xtl="Number: float" ytl="Number: float" xbr="Number: float" ybr="Number: float" occluded="Number: 0 - False, 1 - True">
-      <attribute name="String: an attribute name">String: the attribute value</attribute>
-      ...
-    </box>
-    ...
-  </image>
-  ...
-</annotations>
-```
-
-Example:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<annotations>
-  <version>1.0</version>
-  <meta>
-    <task>
-      <id>1063</id>
-      <name>My annotation task</name>
-      <size>75</size>
-      <mode>annotation</mode>
-      <overlap>0</overlap>
-      <bugtracker></bugtracker>
-      <created>2018-06-06 11:57:54.807162+03:00</created>
-      <updated>2018-06-06 12:42:29.375251+03:00</updated>
-      <labels>
-        <label>
-          <name>car</name>
-          <attributes>
-            <attribute>@select=model:a,b,c,d</attribute>
-          </attributes>
-        </label>
-      </labels>
-      <segments>
-        <segment>
-          <id>3086</id>
-          <start>0</start>
-          <stop>74</stop>
-          <url>http://cvat.examle.com:8080/?id=3086</url>
-        </segment>
-      </segments>
-      <owner>
-        <username>admin</username>
-        <email></email>
-      </owner>
-    </task>
-    <dumped>2018-06-06 15:47:04.386866+03:00</dumped>
-  </meta>
-  <image id="0" name="C15_L1_0001.jpg">
-    <box label="car" xtl="38.95" ytl="26.51" xbr="140.64" ybr="54.29" occluded="0">
-      <attribute name="parked">false</attribute>
-      <attribute name="model">a</attribute>
-    </box>
-  </image>
-  <image id="1" name="C15_L1_0002.jpg">
-    <box label="car" xtl="49.13" ytl="23.34" xbr="149.54" ybr="53.88" occluded="0">
-      <attribute name="parked">true</attribute>
-      <attribute name="model">a</attribute>
-    </box>
-  </image>
-  <image id="2" name="C15_L1_0003.jpg">
-    <box label="car" xtl="50.73" ytl="30.26" xbr="146.72" ybr="59.97" occluded="0">
-      <attribute name="parked">false</attribute>
-      <attribute name="model">b</attribute>
-    </box>
-  </image>
-  <image id="39" name="C15_L1_0040.jpg">
-    <box label="car" xtl="49.60" ytl="30.15" xbr="150.19" ybr="58.06" occluded="0">
-      <attribute name="parked">false</attribute>
-      <attribute name="model">c</attribute>
-    </box>
-  </image>
-</annotations>
-```
-
-### Interpolation
-
-Below you can find description of the data format for video tasks.
-The annotation contains tracks. Each track corresponds to an object which can be presented on multiple frames.
-The same object cannot be presented on the same frame in multiple locations.
-Each location of the object can have multiple attributes even if an attribute is immutable for the object
-it will be cloned for each location (a known redundancy).
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<annotations>
-  ...
-  <track id="Number: id of the track (doesn't have any special meeting" label="String: the associated label">
-    <box frame="Number: frame" xtl="Number: float" ytl="Number: float" xbr="Number: float" ybr="Number: float" outside="Number: 0 - False, 1 - True" occluded="Number: 0 - False, 1 - True" keyframe="Number: 0 - False, 1 - True">
-      <attribute name="String: an attribute name">String: the attribute value</attribute>
-      ...
-    </box>
-    ...
-  </track>
-  ...
-</annotations>
-```
-
-Example:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<annotations>
-  <version>1.0</version>
-  <meta>
-    <task>
-      <id>1062</id>
-      <name>My interpolation task</name>
-      <size>30084</size>
-      <mode>interpolation</mode>
-      <overlap>20</overlap>
-      <bugtracker></bugtracker>
-      <created>2018-05-31 14:13:36.483219+03:00</created>
-      <updated>2018-06-06 13:56:32.113705+03:00</updated>
-      <labels>
-        <label>
-          <name>car</name>
-          <attributes>
-            <attribute>@select=model:1,2,3,4</attribute>
-          </attributes>
-        </label>
-      </labels>
-      <segments>
-        <segment>
-          <id>3085</id>
-          <start>0</start>
-          <stop>30083</stop>
-          <url>http://cvat.example.com:8080/?id=3085</url>
-        </segment>
-      </segments>
-      <owner>
-        <username>admin</username>
-        <email></email>
-      </owner>
-    </task>
-    <dumped>2018-06-06 15:52:11.138470+03:00</dumped>
-  </meta>
-  <track id="0" label="car">
-    <box frame="110" xtl="634.12" ytl="37.68" xbr="661.50" ybr="71.37" outside="0" occluded="1" keyframe="1">
-      <attribute name="model">1</attribute>
-    </box>
-    <box frame="111" xtl="634.21" ytl="38.50" xbr="661.59" ybr="72.19" outside="0" occluded="1" keyframe="0">
-      <attribute name="model">1</attribute>
-    </box>
-    <box frame="112" xtl="634.30" ytl="39.32" xbr="661.67" ybr="73.01" outside="1" occluded="1" keyframe="1">
-      <attribute name="model">1</attribute>
-    </box>
-  </track>
-  <track id="1" label="car">
-    <box frame="0" xtl="626.81" ytl="30.96" xbr="656.05" ybr="58.88" outside="0" occluded="0" keyframe="1">
-      <attribute name="model">3</attribute>
-    </box>
-    <box frame="1" xtl="626.63" ytl="31.56" xbr="655.87" ybr="59.48" outside="0" occluded="0" keyframe="0">
-      <attribute name="model">3</attribute>
-    </box>
-    <box frame="2" xtl="626.09" ytl="33.38" xbr="655.33" ybr="61.29" outside="1" occluded="0" keyframe="1">
-      <attribute name="model">3</attribute>
-    </box>
+  <track id="1" label="s1" source="manual">
+    <skeleton frame="0" outside="0" occluded="0" keyframe="1" points="" z_order="0">
+    </skeleton>
+    <skeleton frame="1" outside="1" occluded="0" keyframe="1" points="" z_order="0">
+    </skeleton>
+    <skeleton frame="6" outside="0" occluded="0" keyframe="1" points="" z_order="0">
+    </skeleton>
+    <skeleton frame="7" outside="1" occluded="0" keyframe="1" points="" z_order="0">
+    </skeleton>
+    <skeleton frame="13" outside="0" occluded="0" keyframe="0" points="" z_order="0">
+    </skeleton>
+    <skeleton frame="14" outside="1" occluded="0" keyframe="1" points="" z_order="0">
+    </skeleton>
+    <track id="0" label="1" source="manual" task_id="20" subset="default_1">
+      <points frame="0" outside="0" occluded="0" keyframe="1" points="112.07,258.59" z_order="0">
+      </points>
+      <points frame="1" outside="1" occluded="0" keyframe="1" points="112.07,258.59" z_order="0">
+      </points>
+      <points frame="6" outside="0" occluded="0" keyframe="0" points="120.07,270.59" z_order="0">
+      </points>
+      <points frame="7" outside="1" occluded="0" keyframe="1" points="120.07,270.59" z_order="0">
+      </points>
+      <points frame="13" outside="0" occluded="0" keyframe="0" points="112.07,258.59" z_order="0">
+      </points>
+      <points frame="14" outside="1" occluded="0" keyframe="1" points="112.07,258.59" z_order="0">
+      </points>
+    </track>
+    <track id="1" label="2" source="manual" task_id="20" subset="default_1">
+      <points frame="0" outside="0" occluded="0" keyframe="1" points="127.87,333.23" z_order="0">
+      </points>
+      <points frame="1" outside="1" occluded="0" keyframe="1" points="127.87,333.23" z_order="0">
+      </points>
+      <points frame="6" outside="0" occluded="0" keyframe="0" points="140.87,350.23" z_order="0">
+      </points>
+      <points frame="7" outside="1" occluded="0" keyframe="1" points="140.87,350.23" z_order="0">
+      </points>
+      <points frame="13" outside="0" occluded="0" keyframe="0" points="127.87,333.23" z_order="0">
+      </points>
+      <points frame="14" outside="1" occluded="0" keyframe="1" points="127.87,333.23" z_order="0">
+      </points>
+    </track>
+    <track id="2" label="3" source="manual" task_id="20" subset="default_1">
+      <points frame="0" outside="0" occluded="0" keyframe="1" points="195.37,223.27" z_order="0">
+      </points>
+      <points frame="1" outside="1" occluded="0" keyframe="1" points="195.37,223.27" z_order="0">
+      </points>
+      <points frame="6" outside="0" occluded="0" keyframe="0" points="210.37,260.27" z_order="0">
+      </points>
+      <points frame="7" outside="1" occluded="0" keyframe="1" points="210.37,260.27" z_order="0">
+      </points>
+      <points frame="13" outside="0" occluded="0" keyframe="0" points="195.37,223.27" z_order="0">
+      </points>
+      <points frame="14" outside="1" occluded="0" keyframe="1" points="195.37,223.27" z_order="0">
+      </points>
+    </track>
   </track>
 </annotations>
 ```

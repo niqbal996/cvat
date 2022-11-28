@@ -1,4 +1,4 @@
-# Copyright (C) 2018 Intel Corporation
+# Copyright (C) 2018-2022 Intel Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -13,4 +13,5 @@ urlpatterns = [
     path('push/<int:tid>', views.push_repository),
     path('check/<str:rq_id>', views.check_process),
     path('meta/get', views.get_meta_info),
+    path('<int:tid>', views.update_git_repo)
 ]

@@ -1,10 +1,16 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
-import React, { MutableRefObject } from 'react';
+import React, { ReactPortal } from 'react';
+import ReactDOM from 'react-dom';
 import { connect } from 'react-redux';
-import Icon, { LoadingOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import Icon, {
+    EnvironmentFilled,
+    EnvironmentOutlined,
+    LoadingOutlined,
+    QuestionCircleOutlined,
+} from '@ant-design/icons';
 import Popover from 'antd/lib/popover';
 import Select from 'antd/lib/select';
 import Button from 'antd/lib/button';
@@ -14,27 +20,28 @@ import Tabs from 'antd/lib/tabs';
 import { Row, Col } from 'antd/lib/grid';
 import notification from 'antd/lib/notification';
 import message from 'antd/lib/message';
-import Progress from 'antd/lib/progress';
-import InputNumber from 'antd/lib/input-number';
 import Dropdown from 'antd/lib/dropdown';
+import Switch from 'antd/lib/switch';
 import lodash from 'lodash';
 
 import { AIToolsIcon } from 'icons';
 import { Canvas, convertShapesForInteractor } from 'cvat-canvas-wrapper';
-import range from 'utils/range';
-import getCore from 'cvat-core-wrapper';
+import { getCore, Attribute, Label } from 'cvat-core-wrapper';
 import openCVWrapper from 'utils/opencv-wrapper/opencv-wrapper';
 import {
-    CombinedState, ActiveControl, Model, ObjectType, ShapeType, ToolsBlockerState,
-} from 'reducers/interfaces';
+    CombinedState, ActiveControl, Model, ObjectType, ShapeType, ToolsBlockerState, ModelAttribute,
+} from 'reducers';
 import {
     interactWithCanvas,
+    switchNavigationBlocked as switchNavigationBlockedAction,
     fetchAnnotationsAsync,
     updateAnnotationsAsync,
     createAnnotationsAsync,
 } from 'actions/annotation-actions';
-import DetectorRunner from 'components/model-runner-modal/detector-runner';
+import DetectorRunner, { DetectorRequestBody } from 'components/model-runner-modal/detector-runner';
 import LabelSelector from 'components/label-selector/label-selector';
+import CVATTooltip from 'components/common/cvat-tooltip';
+
 import ApproximationAccuracy, {
     thresholdFromAccuracy,
 } from 'components/annotation-page/standard-workspace/controls-side-bar/approximation-accuracy';
@@ -54,9 +61,9 @@ interface StateToProps {
     detectors: Model[];
     trackers: Model[];
     curZOrder: number;
-    aiToolsRef: MutableRefObject<any>;
     defaultApproxPolyAccuracy: number;
     toolsBlockerState: ToolsBlockerState;
+    frameIsDeleted: boolean;
 }
 
 interface DispatchToProps {
@@ -64,37 +71,51 @@ interface DispatchToProps {
     updateAnnotations(statesToUpdate: any[]): void;
     createAnnotations(sessionInstance: any, frame: number, statesToCreate: any[]): void;
     fetchAnnotations(): void;
-    onSwitchToolsBlockerState(toolsBlockerState: ToolsBlockerState):void;
+    onSwitchToolsBlockerState(toolsBlockerState: ToolsBlockerState): void;
+    switchNavigationBlocked(navigationBlocked: boolean): void;
 }
 
+const MIN_SUPPORTED_INTERACTOR_VERSION = 2;
 const core = getCore();
 const CustomPopover = withVisibilityHandling(Popover, 'tools-control');
 
 function mapStateToProps(state: CombinedState): StateToProps {
-    const { annotation } = state;
-    const { settings } = state;
-    const { number: frame } = annotation.player.frame;
-    const { instance: jobInstance } = annotation.job;
-    const { instance: canvasInstance, activeControl } = annotation.canvas;
-    const { models } = state;
-    const { interactors, detectors, trackers } = models;
-    const { toolsBlockerState } = state.settings.workspace;
+    const {
+        annotation: {
+            job: { instance: jobInstance, labels },
+            canvas: { instance: canvasInstance, activeControl },
+            player: {
+                frame: { number: frame, data: { deleted: frameIsDeleted } },
+            },
+            annotations: {
+                zLayer: { cur: curZOrder },
+                states,
+            },
+            drawing: { activeLabelID },
+        },
+        models: {
+            interactors, detectors, trackers,
+        },
+        settings: {
+            workspace: { toolsBlockerState, defaultApproxPolyAccuracy },
+        },
+    } = state;
 
     return {
         interactors,
         detectors,
         trackers,
         isActivated: activeControl === ActiveControl.AI_TOOLS,
-        activeLabelID: annotation.drawing.activeLabelID,
-        labels: annotation.job.labels,
-        states: annotation.annotations.states,
+        activeLabelID,
+        labels,
+        states,
         canvasInstance: canvasInstance as Canvas,
         jobInstance,
         frame,
-        curZOrder: annotation.annotations.zLayer.cur,
-        aiToolsRef: annotation.aiToolsRef,
-        defaultApproxPolyAccuracy: settings.workspace.defaultApproxPolyAccuracy,
+        curZOrder,
+        defaultApproxPolyAccuracy,
         toolsBlockerState,
+        frameIsDeleted,
     };
 }
 
@@ -104,27 +125,91 @@ const mapDispatchToProps = {
     createAnnotations: createAnnotationsAsync,
     fetchAnnotations: fetchAnnotationsAsync,
     onSwitchToolsBlockerState: switchToolsBlockerState,
+    switchNavigationBlocked: switchNavigationBlockedAction,
 };
 
 type Props = StateToProps & DispatchToProps;
+interface TrackedShape {
+    clientID: number;
+    serverlessState: any;
+    shapePoints: number[];
+    trackerModel: Model;
+}
+
 interface State {
     activeInteractor: Model | null;
     activeLabelID: number;
     activeTracker: Model | null;
-    trackingProgress: number | null;
-    trackingFrames: number;
+    convertMasksToPolygons: boolean;
+    trackedShapes: TrackedShape[];
     fetching: boolean;
     pointsRecieved: boolean;
     approxPolyAccuracy: number;
     mode: 'detection' | 'interaction' | 'tracking';
+    portals: React.ReactPortal[];
 }
+
+function trackedRectangleMapper(shape: number[]): number[] {
+    return shape.reduce(
+        (acc: number[], value: number, index: number): number[] => {
+            if (index % 2) {
+                // y
+                acc[1] = Math.min(acc[1], value);
+                acc[3] = Math.max(acc[3], value);
+            } else {
+                // x
+                acc[0] = Math.min(acc[0], value);
+                acc[2] = Math.max(acc[2], value);
+            }
+            return acc;
+        },
+        [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER, Number.MIN_SAFE_INTEGER],
+    );
+}
+
+function registerPlugin(): (callback: null | (() => void)) => void {
+    let onTrigger: null | (() => void) = null;
+    const listener = {
+        name: 'Remove annotations listener',
+        description: 'Tracker needs to know when annotations is reset in the job',
+        cvat: {
+            classes: {
+                Job: {
+                    prototype: {
+                        annotations: {
+                            clear: {
+                                leave(self: any, result: any) {
+                                    if (typeof onTrigger === 'function') {
+                                        onTrigger();
+                                    }
+                                    return result;
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    };
+
+    core.plugins.register(listener);
+
+    return (callback: null | (() => void)) => {
+        onTrigger = callback;
+    };
+}
+
+const onRemoveAnnotations = registerPlugin();
 
 export class ToolsControlComponent extends React.PureComponent<Props, State> {
     private interaction: {
         id: string | null;
         isAborted: boolean;
-        latestResponse: number[][];
-        latestResult: number[][];
+        latestResponse: {
+            mask: number[][],
+            points: number[][],
+        };
+        lastestApproximatedPoints: number[][];
         latestRequest: null | {
             interactor: Model;
             data: {
@@ -139,37 +224,55 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
     public constructor(props: Props) {
         super(props);
         this.state = {
+            convertMasksToPolygons: false,
             activeInteractor: props.interactors.length ? props.interactors[0] : null,
             activeTracker: props.trackers.length ? props.trackers[0] : null,
             activeLabelID: props.labels.length ? props.labels[0].id : null,
             approxPolyAccuracy: props.defaultApproxPolyAccuracy,
-            trackingProgress: null,
-            trackingFrames: 10,
+            trackedShapes: [],
             fetching: false,
             pointsRecieved: false,
             mode: 'interaction',
+            portals: [],
         };
 
         this.interaction = {
             id: null,
             isAborted: false,
-            latestResponse: [],
-            latestResult: [],
+            latestResponse: {
+                mask: [],
+                points: [],
+            },
+            lastestApproximatedPoints: [],
             latestRequest: null,
             hideMessage: null,
         };
     }
 
     public componentDidMount(): void {
-        const { canvasInstance, aiToolsRef } = this.props;
-        aiToolsRef.current = this;
+        const { canvasInstance } = this.props;
+        onRemoveAnnotations(() => {
+            this.setState({ trackedShapes: [] });
+        });
+
+        this.setState({
+            portals: this.collectTrackerPortals(),
+        });
         canvasInstance.html().addEventListener('canvas.interacted', this.interactionListener);
         canvasInstance.html().addEventListener('canvas.canceled', this.cancelListener);
     }
 
     public componentDidUpdate(prevProps: Props, prevState: State): void {
-        const { isActivated, defaultApproxPolyAccuracy, canvasInstance } = this.props;
-        const { approxPolyAccuracy, mode } = this.state;
+        const {
+            isActivated, defaultApproxPolyAccuracy, canvasInstance, states,
+        } = this.props;
+        const { approxPolyAccuracy, mode, activeTracker } = this.state;
+
+        if (prevProps.states !== states || prevState.activeTracker !== activeTracker) {
+            this.setState({
+                portals: this.collectTrackerPortals(),
+            });
+        }
 
         if (prevProps.isActivated && !isActivated) {
             window.removeEventListener('contextmenu', this.contextmenuDisabler);
@@ -183,8 +286,8 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
             this.interaction = {
                 id: null,
                 isAborted: false,
-                latestResponse: [],
-                latestResult: [],
+                latestResponse: { mask: [], points: [] },
+                lastestApproximatedPoints: [],
                 latestRequest: null,
                 hideMessage: null,
             };
@@ -197,25 +300,28 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         }
 
         if (prevState.approxPolyAccuracy !== approxPolyAccuracy) {
-            if (isActivated && mode === 'interaction' && this.interaction.latestResponse.length) {
-                this.approximateResponsePoints(this.interaction.latestResponse).then((points: number[][]) => {
-                    this.interaction.latestResult = points;
-                    canvasInstance.interact({
-                        enabled: true,
-                        intermediateShape: {
-                            shapeType: ShapeType.POLYGON,
-                            points: this.interaction.latestResult.flat(),
-                        },
-                        onChangeToolsBlockerState: this.onChangeToolsBlockerState,
+            if (isActivated && mode === 'interaction' && this.interaction.latestResponse.points.length) {
+                this.approximateResponsePoints(this.interaction.latestResponse.points)
+                    .then((points: number[][]) => {
+                        this.interaction.lastestApproximatedPoints = points;
+                        canvasInstance.interact({
+                            enabled: true,
+                            intermediateShape: {
+                                shapeType: ShapeType.POLYGON,
+                                points: this.interaction.lastestApproximatedPoints.flat(),
+                            },
+                            onChangeToolsBlockerState: this.onChangeToolsBlockerState,
+                        });
                     });
-                });
             }
         }
+
+        this.checkTrackedStates(prevProps);
     }
 
     public componentWillUnmount(): void {
-        const { canvasInstance, aiToolsRef } = this.props;
-        aiToolsRef.current = undefined;
+        const { canvasInstance } = this.props;
+        onRemoveAnnotations(null);
         canvasInstance.html().removeEventListener('canvas.interacted', this.interactionListener);
         canvasInstance.html().removeEventListener('canvas.canceled', this.cancelListener);
     }
@@ -241,7 +347,7 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
 
     private runInteractionRequest = async (interactionId: string): Promise<void> => {
         const { jobInstance, canvasInstance } = this.props;
-        const { activeInteractor, fetching } = this.state;
+        const { activeInteractor, fetching, convertMasksToPolygons } = this.state;
 
         const { id, latestRequest } = this.interaction;
         if (id !== interactionId || !latestRequest || fetching) {
@@ -255,23 +361,31 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         this.interaction.latestRequest = null;
 
         try {
-            this.interaction.hideMessage = message.loading(`Waiting a response from ${activeInteractor?.name}..`, 0);
+            this.interaction.hideMessage = message.loading({
+                content: `Waiting a response from ${activeInteractor?.name}..`,
+                duration: 0,
+                className: 'cvat-tracking-notice',
+            });
             try {
                 // run server request
                 this.setState({ fetching: true });
-                const response = await core.lambda.call(jobInstance.task, interactor, data);
+                const response = await core.lambda.call(jobInstance.taskId, interactor, data);
+
                 // approximation with cv.approxPolyDP
-                const approximated = await this.approximateResponsePoints(response);
+                const approximated = await this.approximateResponsePoints(response.points);
 
                 if (this.interaction.id !== interactionId || this.interaction.isAborted) {
                     // new interaction session or the session is aborted
                     return;
                 }
 
-                this.interaction.latestResponse = response;
-                this.interaction.latestResult = approximated;
+                this.interaction.latestResponse = {
+                    mask: response.mask,
+                    points: response.points,
+                };
+                this.interaction.lastestApproximatedPoints = approximated;
 
-                this.setState({ pointsRecieved: !!response.length });
+                this.setState({ pointsRecieved: !!response.points.length });
             } finally {
                 if (this.interaction.id === interactionId && this.interaction.hideMessage) {
                     this.interaction.hideMessage();
@@ -281,19 +395,24 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                 this.setState({ fetching: false });
             }
 
-            if (this.interaction.latestResult.length) {
+            if (this.interaction.lastestApproximatedPoints.length) {
+                const height = this.interaction.latestResponse.mask.length;
+                const width = this.interaction.latestResponse.mask[0].length;
+                const maskPoints = this.interaction.latestResponse.mask.flat();
+                maskPoints.push(0, 0, width - 1, height - 1);
                 canvasInstance.interact({
                     enabled: true,
                     intermediateShape: {
-                        shapeType: ShapeType.POLYGON,
-                        points: this.interaction.latestResult.flat(),
+                        shapeType: convertMasksToPolygons ? ShapeType.POLYGON : ShapeType.MASK,
+                        points: convertMasksToPolygons ? this.interaction.lastestApproximatedPoints.flat() :
+                            maskPoints,
                     },
                     onChangeToolsBlockerState: this.onChangeToolsBlockerState,
                 });
             }
 
             setTimeout(() => this.runInteractionRequest(interactionId));
-        } catch (err) {
+        } catch (err: any) {
             notification.error({
                 description: err.toString(),
                 message: 'Interaction error occured',
@@ -320,8 +439,8 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
             // prevent future requests if possible
             this.interaction.isAborted = true;
             this.interaction.latestRequest = null;
-            if (this.interaction.latestResult.length) {
-                this.constructFromPoints(this.interaction.latestResult);
+            if (this.interaction.lastestApproximatedPoints.length) {
+                this.constructFromPoints(this.interaction.lastestApproximatedPoints);
             }
         } else if (shapesUpdated) {
             const interactor = activeInteractor as Model;
@@ -339,6 +458,7 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
     };
 
     private onTracking = async (e: Event): Promise<void> => {
+        const { trackedShapes, activeTracker } = this.state;
         const {
             isActivated, jobInstance, frame, curZOrder, fetchAnnotations,
         } = this.props;
@@ -348,7 +468,7 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         }
 
         const { activeLabelID } = this.state;
-        const [label] = jobInstance.task.labels.filter((_label: any): boolean => _label.id === activeLabelID);
+        const [label] = jobInstance.labels.filter((_label: any): boolean => _label.id === activeLabelID);
 
         const { isDone, shapesUpdated } = (e as CustomEvent).detail;
         if (!isDone || !shapesUpdated) {
@@ -365,19 +485,26 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                 points,
                 frame,
                 occluded: false,
-                source: 'auto',
                 attributes: {},
+                descriptions: [`Trackable (${activeTracker?.name})`],
             });
 
             const [clientID] = await jobInstance.annotations.put([state]);
+            this.setState({
+                trackedShapes: [
+                    ...trackedShapes,
+                    {
+                        clientID,
+                        serverlessState: null,
+                        shapePoints: points,
+                        trackerModel: activeTracker as Model,
+                    },
+                ],
+            });
 
             // update annotations on a canvas
             fetchAnnotations();
-
-            const states = await jobInstance.annotations.get(frame);
-            const [objectState] = states.filter((_state: any): boolean => _state.clientID === clientID);
-            await this.trackState(objectState);
-        } catch (err) {
+        } catch (err: any) {
             notification.error({
                 description: err.toString(),
                 message: 'Tracking error occured',
@@ -399,8 +526,17 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
 
     private setActiveInteractor = (value: string): void => {
         const { interactors } = this.props;
+        const [interactor] = interactors.filter((_interactor: Model) => _interactor.id === value);
+
+        if (interactor.version < MIN_SUPPORTED_INTERACTOR_VERSION) {
+            notification.warning({
+                message: 'Interactor API is outdated',
+                description: 'Probably, you should consider updating the serverless function',
+            });
+        }
+
         this.setState({
-            activeInteractor: interactors.filter((interactor: Model) => interactor.id === value)[0],
+            activeInteractor: interactor,
         });
     };
 
@@ -411,7 +547,7 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         });
     };
 
-    private onChangeToolsBlockerState = (event:string):void => {
+    private onChangeToolsBlockerState = (event: string): void => {
         const { isActivated, onSwitchToolsBlockerState } = this.props;
         if (isActivated && event === 'keydown') {
             onSwitchToolsBlockerState({ algorithmsLocked: true });
@@ -420,22 +556,309 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         }
     };
 
+    private collectTrackerPortals(): React.ReactPortal[] {
+        const { states, fetchAnnotations } = this.props;
+        const { trackedShapes, activeTracker } = this.state;
+
+        const trackedClientIDs = trackedShapes.map((trackedShape: TrackedShape) => trackedShape.clientID);
+        const portals = !activeTracker ?
+            [] :
+            states
+                .filter((objectState) => objectState.objectType === 'track' && objectState.shapeType === 'rectangle')
+                .map((objectState: any): React.ReactPortal | null => {
+                    const { clientID } = objectState;
+                    const selectorID = `#cvat-objects-sidebar-state-item-${clientID}`;
+                    let targetElement = window.document.querySelector(
+                        `${selectorID} .cvat-object-item-button-prev-keyframe`,
+                    ) as HTMLElement;
+
+                    const isTracked = trackedClientIDs.includes(clientID);
+                    if (targetElement) {
+                        targetElement = targetElement.parentElement?.parentElement as HTMLElement;
+                        return ReactDOM.createPortal(
+                            <Col>
+                                {isTracked ? (
+                                    <CVATTooltip overlay='Disable tracking'>
+                                        <EnvironmentFilled
+                                            onClick={() => {
+                                                const filteredStates = trackedShapes.filter(
+                                                    (trackedShape: TrackedShape) => trackedShape.clientID !== clientID,
+                                                );
+                                                /* eslint no-param-reassign: ["error", { "props": false }] */
+                                                objectState.descriptions = [];
+                                                objectState.save().then(() => {
+                                                    this.setState({
+                                                        trackedShapes: filteredStates,
+                                                    });
+                                                });
+                                                fetchAnnotations();
+                                            }}
+                                        />
+                                    </CVATTooltip>
+                                ) : (
+                                    <CVATTooltip overlay={`Enable tracking using ${activeTracker.name}`}>
+                                        <EnvironmentOutlined
+                                            onClick={() => {
+                                                objectState.descriptions = [`Trackable (${activeTracker.name})`];
+                                                objectState.save().then(() => {
+                                                    this.setState({
+                                                        trackedShapes: [
+                                                            ...trackedShapes,
+                                                            {
+                                                                clientID,
+                                                                serverlessState: null,
+                                                                shapePoints: objectState.points,
+                                                                trackerModel: activeTracker,
+                                                            },
+                                                        ],
+                                                    });
+                                                });
+                                                fetchAnnotations();
+                                            }}
+                                        />
+                                    </CVATTooltip>
+                                )}
+                            </Col>,
+                            targetElement,
+                        );
+                    }
+
+                    return null;
+                })
+                .filter((portal: ReactPortal | null) => portal !== null);
+
+        return portals as React.ReactPortal[];
+    }
+
+    private async checkTrackedStates(prevProps: Props): Promise<void> {
+        const {
+            frame,
+            jobInstance,
+            states: objectStates,
+            trackers,
+            fetchAnnotations,
+            switchNavigationBlocked,
+        } = this.props;
+        const { trackedShapes } = this.state;
+        let withServerRequest = false;
+
+        type AccumulatorType = {
+            statefull: {
+                [index: string]: {
+                    // tracker id
+                    clientIDs: number[];
+                    states: any[];
+                    shapes: number[][];
+                };
+            };
+            stateless: {
+                [index: string]: {
+                    // tracker id
+                    clientIDs: number[];
+                    shapes: number[][];
+                };
+            };
+        };
+
+        if (prevProps.frame !== frame && trackedShapes.length) {
+            // 1. find all trackable objects on the current frame
+            // 2. devide them into two groups: with relevant state, without relevant state
+            const trackingData = trackedShapes.reduce<AccumulatorType>(
+                (acc: AccumulatorType, trackedShape: TrackedShape): AccumulatorType => {
+                    const {
+                        serverlessState, shapePoints, clientID, trackerModel,
+                    } = trackedShape;
+                    const [clientState] = objectStates.filter((_state: any): boolean => _state.clientID === clientID);
+
+                    if (
+                        !clientState ||
+                        clientState.keyframes.prev !== frame - 1 ||
+                        clientState.keyframes.last >= frame
+                    ) {
+                        return acc;
+                    }
+
+                    if (clientState && !clientState.outside) {
+                        const { points } = clientState;
+                        withServerRequest = true;
+                        const stateIsRelevant =
+                            serverlessState !== null &&
+                            points.length === shapePoints.length &&
+                            points.every((coord: number, i: number) => coord === shapePoints[i]);
+                        if (stateIsRelevant) {
+                            const container = acc.statefull[trackerModel.id] || {
+                                clientIDs: [],
+                                shapes: [],
+                                states: [],
+                            };
+                            container.clientIDs.push(clientID);
+                            container.shapes.push(points);
+                            container.states.push(serverlessState);
+                            acc.statefull[trackerModel.id] = container;
+                        } else {
+                            const container = acc.stateless[trackerModel.id] || {
+                                clientIDs: [],
+                                shapes: [],
+                            };
+                            container.clientIDs.push(clientID);
+                            container.shapes.push(points);
+                            acc.stateless[trackerModel.id] = container;
+                        }
+                    }
+
+                    return acc;
+                },
+                {
+                    statefull: {},
+                    stateless: {},
+                },
+            );
+
+            try {
+                if (withServerRequest) {
+                    switchNavigationBlocked(true);
+                }
+                // 3. get relevant state for the second group
+                for (const trackerID of Object.keys(trackingData.stateless)) {
+                    let hideMessage = null;
+                    try {
+                        const [tracker] = trackers.filter((_tracker: Model) => _tracker.id === trackerID);
+                        if (!tracker) {
+                            throw new Error(`Suitable tracker with ID ${trackerID} not found in tracker list`);
+                        }
+
+                        const trackableObjects = trackingData.stateless[trackerID];
+                        const numOfObjects = trackableObjects.clientIDs.length;
+                        hideMessage = message.loading({
+                            content: `${tracker.name}: states are being initialized for ${numOfObjects} ${
+                                numOfObjects > 1 ? 'objects' : 'object'
+                            } ..`,
+                            duration: 0,
+                            className: 'cvat-tracking-notice',
+                        });
+                        // eslint-disable-next-line no-await-in-loop
+                        const response = await core.lambda.call(jobInstance.taskId, tracker, {
+                            frame: frame - 1,
+                            shapes: trackableObjects.shapes,
+                        });
+
+                        const { states: serverlessStates } = response;
+                        const statefullContainer = trackingData.statefull[trackerID] || {
+                            clientIDs: [],
+                            shapes: [],
+                            states: [],
+                        };
+
+                        Array.prototype.push.apply(statefullContainer.clientIDs, trackableObjects.clientIDs);
+                        Array.prototype.push.apply(statefullContainer.shapes, trackableObjects.shapes);
+                        Array.prototype.push.apply(statefullContainer.states, serverlessStates);
+                        trackingData.statefull[trackerID] = statefullContainer;
+                        delete trackingData.stateless[trackerID];
+                    } catch (error: any) {
+                        notification.error({
+                            message: 'Tracker initialization error',
+                            description: error.toString(),
+                        });
+                    } finally {
+                        if (hideMessage) hideMessage();
+                    }
+                }
+
+                for (const trackerID of Object.keys(trackingData.statefull)) {
+                    // 4. run tracking for all the objects
+                    let hideMessage = null;
+                    try {
+                        const [tracker] = trackers.filter((_tracker: Model) => _tracker.id === trackerID);
+                        if (!tracker) {
+                            throw new Error(`Suitable tracker with ID ${trackerID} not found in tracker list`);
+                        }
+
+                        const trackableObjects = trackingData.statefull[trackerID];
+                        const numOfObjects = trackableObjects.clientIDs.length;
+                        hideMessage = message.loading({
+                            content: `${tracker.name}: ${numOfObjects} ${
+                                numOfObjects > 1 ? 'objects are' : 'object is'
+                            } being tracked..`,
+                            duration: 0,
+                            className: 'cvat-tracking-notice',
+                        });
+                        // eslint-disable-next-line no-await-in-loop
+                        const response = await core.lambda.call(jobInstance.taskId, tracker, {
+                            frame,
+                            shapes: trackableObjects.shapes,
+                            states: trackableObjects.states,
+                        });
+
+                        response.shapes = response.shapes.map(trackedRectangleMapper);
+                        for (let i = 0; i < trackableObjects.clientIDs.length; i++) {
+                            const clientID = trackableObjects.clientIDs[i];
+                            const shape = response.shapes[i];
+                            const state = response.states[i];
+                            const [objectState] = objectStates.filter(
+                                (_state: any): boolean => _state.clientID === clientID,
+                            );
+                            const [trackedShape] = trackedShapes.filter(
+                                (_trackedShape: TrackedShape) => _trackedShape.clientID === clientID,
+                            );
+                            objectState.points = shape;
+                            objectState.save().then(() => {
+                                trackedShape.serverlessState = state;
+                                trackedShape.shapePoints = shape;
+                            });
+                        }
+                    } catch (error: any) {
+                        notification.error({
+                            message: 'Tracking error',
+                            description: error.toString(),
+                        });
+                    } finally {
+                        if (hideMessage) hideMessage();
+                        fetchAnnotations();
+                    }
+                }
+            } finally {
+                if (withServerRequest) {
+                    switchNavigationBlocked(false);
+                }
+            }
+        }
+    }
+
     private constructFromPoints(points: number[][]): void {
+        const { convertMasksToPolygons } = this.state;
         const {
             frame, labels, curZOrder, jobInstance, activeLabelID, createAnnotations,
         } = this.props;
 
-        const object = new core.classes.ObjectState({
-            frame,
-            objectType: ObjectType.SHAPE,
-            label: labels.length ? labels.filter((label: any) => label.id === activeLabelID)[0] : null,
-            shapeType: ShapeType.POLYGON,
-            points: points.flat(),
-            occluded: false,
-            zOrder: curZOrder,
-        });
+        if (convertMasksToPolygons) {
+            const object = new core.classes.ObjectState({
+                frame,
+                objectType: ObjectType.SHAPE,
+                label: labels.length ? labels.filter((label: any) => label.id === activeLabelID)[0] : null,
+                shapeType: ShapeType.POLYGON,
+                points: points.flat(),
+                occluded: false,
+                zOrder: curZOrder,
+            });
 
-        createAnnotations(jobInstance, frame, [object]);
+            createAnnotations(jobInstance, frame, [object]);
+        } else {
+            const height = this.interaction.latestResponse.mask.length;
+            const width = this.interaction.latestResponse.mask[0].length;
+            const maskPoints = this.interaction.latestResponse.mask.flat();
+            maskPoints.push(0, 0, width - 1, height - 1);
+            const object = new core.classes.ObjectState({
+                frame,
+                objectType: ObjectType.SHAPE,
+                label: labels.length ? labels.filter((label: any) => label.id === activeLabelID)[0] : null,
+                shapeType: ShapeType.MASK,
+                points: maskPoints,
+                occluded: false,
+                zOrder: curZOrder,
+            });
+
+            createAnnotations(jobInstance, frame, [object]);
+        }
     }
 
     private async approximateResponsePoints(points: number[][]): Promise<number[][]> {
@@ -457,68 +880,19 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         return points;
     }
 
-    public async trackState(state: any): Promise<void> {
-        const { jobInstance, frame, fetchAnnotations } = this.props;
-        const { activeTracker, trackingFrames } = this.state;
-        const { clientID, points } = state;
-
-        const tracker = activeTracker as Model;
-        try {
-            this.setState({ trackingProgress: 0, fetching: true });
-            let response = await core.lambda.call(jobInstance.task, tracker, {
-                task: jobInstance.task,
-                frame,
-                shape: points,
-            });
-
-            for (const offset of range(1, trackingFrames + 1)) {
-                /* eslint-disable no-await-in-loop */
-                const states = await jobInstance.annotations.get(frame + offset);
-                const [objectState] = states.filter((_state: any): boolean => _state.clientID === clientID);
-                response = await core.lambda.call(jobInstance.task, tracker, {
-                    task: jobInstance.task,
-                    frame: frame + offset,
-                    shape: response.points,
-                    state: response.state,
-                });
-
-                const reduced = response.shape.reduce(
-                    (acc: number[], value: number, index: number): number[] => {
-                        if (index % 2) {
-                            // y
-                            acc[1] = Math.min(acc[1], value);
-                            acc[3] = Math.max(acc[3], value);
-                        } else {
-                            // x
-                            acc[0] = Math.min(acc[0], value);
-                            acc[2] = Math.max(acc[2], value);
-                        }
-                        return acc;
-                    },
-                    [
-                        Number.MAX_SAFE_INTEGER,
-                        Number.MAX_SAFE_INTEGER,
-                        Number.MIN_SAFE_INTEGER,
-                        Number.MIN_SAFE_INTEGER,
-                    ],
-                );
-
-                objectState.points = reduced;
-                await objectState.save();
-
-                this.setState({ trackingProgress: offset / trackingFrames });
-            }
-        } finally {
-            this.setState({ trackingProgress: null, fetching: false });
-            fetchAnnotations();
-        }
-    }
-
-    public trackingAvailable(): boolean {
-        const { activeTracker, trackingFrames } = this.state;
-        const { trackers } = this.props;
-
-        return !!trackingFrames && !!trackers.length && activeTracker !== null;
+    private renderMasksConvertingBlock(): JSX.Element {
+        const { convertMasksToPolygons } = this.state;
+        return (
+            <Row className='cvat-interactors-setups-container'>
+                <Switch
+                    checked={convertMasksToPolygons}
+                    onChange={(checked: boolean) => {
+                        this.setState({ convertMasksToPolygons: checked });
+                    }}
+                />
+                <Text>Convert masks to polygons</Text>
+            </Row>
+        );
     }
 
     private renderLabelBlock(): JSX.Element {
@@ -549,9 +923,7 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         const {
             trackers, canvasInstance, jobInstance, frame, onInteractionStart,
         } = this.props;
-        const {
-            activeTracker, activeLabelID, fetching, trackingFrames,
-        } = this.state;
+        const { activeTracker, activeLabelID, fetching } = this.state;
 
         if (!trackers.length) {
             return (
@@ -589,27 +961,6 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                         </Select>
                     </Col>
                 </Row>
-                <Row align='middle' justify='start' style={{ marginTop: '5px' }}>
-                    <Col>
-                        <Text>Tracking frames</Text>
-                    </Col>
-                    <Col offset={2}>
-                        <InputNumber
-                            value={trackingFrames}
-                            step={1}
-                            min={1}
-                            precision={0}
-                            max={jobInstance.stopFrame - frame}
-                            onChange={(value: number | undefined | string | null): void => {
-                                if (typeof value !== 'undefined' && value !== null) {
-                                    this.setState({
-                                        trackingFrames: +value,
-                                    });
-                                }
-                            }}
-                        />
-                    </Col>
-                </Row>
                 <Row align='middle' justify='end'>
                     <Col>
                         <Button
@@ -643,7 +994,9 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
 
     private renderInteractorBlock(): JSX.Element {
         const { interactors, canvasInstance, onInteractionStart } = this.props;
-        const { activeInteractor, activeLabelID, fetching } = this.state;
+        const {
+            activeInteractor, activeLabelID, fetching,
+        } = this.state;
 
         if (!interactors.length) {
             return (
@@ -706,7 +1059,9 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                             type='primary'
                             loading={fetching}
                             className='cvat-tools-interact-button'
-                            disabled={!activeInteractor || fetching}
+                            disabled={!activeInteractor ||
+                                fetching ||
+                                activeInteractor.version < MIN_SUPPORTED_INTERACTOR_VERSION}
                             onClick={() => {
                                 this.setState({ mode: 'interaction' });
 
@@ -746,38 +1101,135 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                 </Row>
             );
         }
+        const attrsMap: Record<string, Record<string, number>> = {};
+        jobInstance.labels.forEach((label: any) => {
+            attrsMap[label.name] = {};
+            label.attributes.forEach((attr: any) => {
+                attrsMap[label.name][attr.name] = attr.id;
+            });
+        });
+
+        function checkAttributesCompatibility(
+            functionAttribute: ModelAttribute | undefined,
+            dbAttribute: Attribute | undefined,
+            value: string,
+        ): boolean {
+            if (!dbAttribute || !functionAttribute) {
+                return false;
+            }
+
+            const { inputType } = (dbAttribute as any as { inputType: string });
+            if (functionAttribute.input_type === inputType) {
+                if (functionAttribute.input_type === 'number') {
+                    const [min, max, step] = dbAttribute.values;
+                    return !Number.isNaN(+value) && +value >= +min && +value <= +max && !(+value % +step);
+                }
+
+                if (functionAttribute.input_type === 'checkbox') {
+                    return ['true', 'false'].includes(value.toLowerCase());
+                }
+
+                if (['select', 'radio'].includes(functionAttribute.input_type)) {
+                    return dbAttribute.values.includes(value);
+                }
+
+                return true;
+            }
+
+            switch (functionAttribute.input_type) {
+                case 'number':
+                    return dbAttribute.values.includes(value) || inputType === 'text';
+                case 'text':
+                    return ['select', 'radio'].includes(dbAttribute.inputType) && dbAttribute.values.includes(value);
+                case 'select':
+                    return (inputType === 'radio' && dbAttribute.values.includes(value)) || inputType === 'text';
+                case 'radio':
+                    return (inputType === 'select' && dbAttribute.values.includes(value)) || inputType === 'text';
+                case 'checkbox':
+                    return dbAttribute.values.includes(value) || inputType === 'text';
+                default:
+                    return false;
+            }
+        }
 
         return (
             <DetectorRunner
                 withCleanup={false}
                 models={detectors}
-                task={jobInstance.task}
-                runInference={async (task: any, model: Model, body: object) => {
+                labels={jobInstance.labels}
+                dimension={jobInstance.dimension}
+                runInference={async (model: Model, body: DetectorRequestBody) => {
                     try {
                         this.setState({ mode: 'detection', fetching: true });
-                        const result = await core.lambda.call(task, model, { ...body, frame });
+                        const result = await core.lambda.call(jobInstance.taskId, model, { ...body, frame });
                         const states = result.map(
-                            (data: any): any =>
-                                new core.classes.ObjectState({
-                                    shapeType: data.type,
-                                    label: task.labels.filter((label: any): boolean => label.name === data.label)[0],
-                                    points: data.points,
+                            (data: any): any => {
+                                const jobLabel = (jobInstance.labels as Label[])
+                                    .find((jLabel: Label): boolean => jLabel.name === data.label);
+                                const [modelLabel] = Object.entries(body.mapping)
+                                    .find(([, { name }]) => name === data.label) || [];
+
+                                if (!jobLabel || !modelLabel) return null;
+
+                                const objectData = {
+                                    label: jobLabel,
                                     objectType: ObjectType.SHAPE,
                                     frame,
                                     occluded: false,
                                     source: 'auto',
-                                    attributes: {},
+                                    attributes: (data.attributes as { name: string, value: string }[])
+                                        .reduce((acc, attr) => {
+                                            const [modelAttr] = Object.entries(body.mapping[modelLabel].attributes)
+                                                .find((value: string[]) => value[1] === attr.name) || [];
+                                            const areCompatible = checkAttributesCompatibility(
+                                                model.attributes[modelLabel]
+                                                    .find((mAttr) => mAttr.name === modelAttr),
+                                                jobLabel.attributes.find((jobAttr: Attribute) => (
+                                                    jobAttr.name === attr.name
+                                                )),
+                                                attr.value,
+                                            );
+
+                                            if (areCompatible) {
+                                                acc[attrsMap[data.label][attr.name]] = attr.value;
+                                            }
+
+                                            return acc;
+                                        }, {} as Record<number, string>),
                                     zOrder: curZOrder,
-                                }),
-                        );
+                                };
+
+                                if (data.type === 'mask' && data.points && body.convMaskToPoly) {
+                                    return new core.classes.ObjectState({
+                                        ...objectData,
+                                        shapeType: 'polygon',
+                                        points: data.points,
+                                    });
+                                }
+
+                                if (data.type === 'mask') {
+                                    return new core.classes.ObjectState({
+                                        ...objectData,
+                                        shapeType: data.type,
+                                        points: data.mask,
+                                    });
+                                }
+
+                                return new core.classes.ObjectState({
+                                    ...objectData,
+                                    shapeType: data.type,
+                                    points: data.points,
+                                });
+                            },
+                        ).filter((state: any) => state);
 
                         createAnnotations(jobInstance, frame, states);
                         const { onSwitchToolsBlockerState } = this.props;
                         onSwitchToolsBlockerState({ buttonVisible: false });
-                    } catch (error) {
+                    } catch (error: any) {
                         notification.error({
                             description: error.toString(),
-                            message: 'Detection error occured',
+                            message: 'Detection error occurred',
                         });
                     } finally {
                         this.setState({ fetching: false });
@@ -797,11 +1249,9 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                         </Text>
                     </Col>
                 </Row>
-                <Tabs
-                    type='card'
-                    tabBarGutter={8}
-                >
+                <Tabs type='card' tabBarGutter={8}>
                     <Tabs.TabPane key='interactors' tab='Interactors'>
+                        {this.renderMasksConvertingBlock()}
                         {this.renderLabelBlock()}
                         {this.renderInteractorBlock()}
                     </Tabs.TabPane>
@@ -819,15 +1269,15 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
 
     public render(): JSX.Element | null {
         const {
-            interactors, detectors, trackers, isActivated, canvasInstance, labels,
+            interactors, detectors, trackers, isActivated, canvasInstance, labels, frameIsDeleted,
         } = this.props;
         const {
-            fetching, trackingProgress, approxPolyAccuracy, pointsRecieved, mode,
+            fetching, approxPolyAccuracy, pointsRecieved, mode, portals, convertMasksToPolygons,
         } = this.state;
 
         if (![...interactors, ...detectors, ...trackers].length) return null;
 
-        const dynamcPopoverPros = isActivated ?
+        const dynamicPopoverProps = isActivated ?
             {
                 overlayStyle: {
                     display: 'none',
@@ -846,11 +1296,9 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                 className: 'cvat-tools-control',
             };
 
-        const showAnyContent = !!labels.length;
-        const showInteractionContent = isActivated && mode === 'interaction' && pointsRecieved;
+        const showAnyContent = labels.length && !frameIsDeleted;
+        const showInteractionContent = isActivated && mode === 'interaction' && pointsRecieved && convertMasksToPolygons;
         const showDetectionContent = fetching && mode === 'detection';
-        const showTrackingContent = fetching && mode === 'tracking' && trackingProgress !== null;
-        const formattedTrackingProgress = showTrackingContent ? +((trackingProgress as number) * 100).toFixed(0) : null;
 
         const interactionContent: JSX.Element | null = showInteractionContent ? (
             <>
@@ -863,31 +1311,28 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
             </>
         ) : null;
 
-        const trackOrDetectModal: JSX.Element | null =
-            showDetectionContent || showTrackingContent ? (
-                <Modal
-                    title='Making a server request'
-                    zIndex={Number.MAX_SAFE_INTEGER}
-                    visible
-                    destroyOnClose
-                    closable={false}
-                    footer={[]}
-                >
-                    <Text>Waiting for a server response..</Text>
-                    <LoadingOutlined style={{ marginLeft: '10px' }} />
-                    {showTrackingContent ? (
-                        <Progress percent={formattedTrackingProgress as number} status='active' />
-                    ) : null}
-                </Modal>
-            ) : null;
+        const detectionContent: JSX.Element | null = showDetectionContent ? (
+            <Modal
+                title='Making a server request'
+                zIndex={Number.MAX_SAFE_INTEGER}
+                visible
+                destroyOnClose
+                closable={false}
+                footer={[]}
+            >
+                <Text>Waiting for a server response..</Text>
+                <LoadingOutlined style={{ marginLeft: '10px' }} />
+            </Modal>
+        ) : null;
 
         return showAnyContent ? (
             <>
-                <CustomPopover {...dynamcPopoverPros} placement='right' content={this.renderPopoverContent()}>
+                <CustomPopover {...dynamicPopoverProps} placement='right' content={this.renderPopoverContent()}>
                     <Icon {...dynamicIconProps} component={AIToolsIcon} />
                 </CustomPopover>
                 {interactionContent}
-                {trackOrDetectModal}
+                {detectionContent}
+                {portals}
             </>
         ) : (
             <Icon className=' cvat-tools-control cvat-disabled-canvas-control' component={AIToolsIcon} />

@@ -1,4 +1,4 @@
-# Copyright (C) 2020 Intel Corporation
+# Copyright (C) 2020-2022 Intel Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -62,5 +62,5 @@ class ModelHandler:
             shape = state['ploygon'].flatten().tolist()
             state = self.encode_state(state)
 
-        return {"shape": shape, "state": state}
+        return shape, state
 

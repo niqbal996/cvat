@@ -1,4 +1,5 @@
-# Copyright (C) 2018-2021 Intel Corporation
+# Copyright (C) 2018-2022 Intel Corporation
+# Copyright (C) 2022 CVAT.ai Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -20,7 +21,9 @@ import fcntl
 import shutil
 import subprocess
 import mimetypes
+from corsheaders.defaults import default_headers
 from distutils.util import strtobool
+from cvat import __version__
 
 mimetypes.add_type("application/wasm", ".wasm", True)
 
@@ -96,6 +99,7 @@ try:
 except Exception as ex:
     print(str(ex))
 
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -103,63 +107,72 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'cvat.apps.authentication',
-    'cvat.apps.dataset_manager',
-    'cvat.apps.engine',
-    'cvat.apps.dataset_repo',
-    'cvat.apps.restrictions',
-    'cvat.apps.lambda_manager',
-    'cvat.apps.opencv',
     'django_rq',
     'compressor',
-    'cacheops',
-    'sendfile',
+    'django_sendfile',
     'dj_pagination',
-    'revproxy',
-    'rules',
     'rest_framework',
     'rest_framework.authtoken',
-    'django_filters',
-    'drf_yasg',
-    'rest_auth',
+    'drf_spectacular',
+    'dj_rest_auth',
     'django.contrib.sites',
     'allauth',
     'allauth.account',
     'corsheaders',
     'allauth.socialaccount',
-    'rest_auth.registration'
+    # social providers
+    'allauth.socialaccount.providers.github',
+    'allauth.socialaccount.providers.google',
+    'dj_rest_auth.registration',
+    'cvat.apps.iam',
+    'cvat.apps.dataset_manager',
+    'cvat.apps.organizations',
+    'cvat.apps.engine',
+    'cvat.apps.dataset_repo',
+    'cvat.apps.lambda_manager',
+    'cvat.apps.opencv',
+    'cvat.apps.webhooks',
 ]
-
-if strtobool(os.environ.get("ADAPTIVE_AUTO_ANNOTATION", 'false')):
-    INSTALLED_APPS.append('cvat.apps.training')
 
 SITE_ID = 1
 
 REST_FRAMEWORK = {
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+        'cvat.apps.engine.parsers.TusUploadParser',
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'cvat.apps.engine.renderers.CVATAPIRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
+        'cvat.apps.iam.permissions.IsMemberInOrganization',
+        'cvat.apps.iam.permissions.PolicyEnforcer',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'cvat.apps.authentication.auth.TokenAuthentication',
-        'cvat.apps.authentication.auth.SignatureAuthentication',
+        'cvat.apps.iam.authentication.TokenAuthenticationEx',
+        'cvat.apps.iam.authentication.SignatureAuthentication',
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication'
     ],
     'DEFAULT_VERSIONING_CLASS':
-        # Don't try to use URLPathVersioning. It will give you /api/{version}
-        # in path and '/api/docs' will not collapse similar items (flat list
-        # of all possible methods isn't readable).
-        'rest_framework.versioning.NamespaceVersioning',
-    # Need to add 'api-docs' here as a workaround for include_docs_urls.
-    'ALLOWED_VERSIONS': ('v1', 'api-docs'),
+        'rest_framework.versioning.AcceptHeaderVersioning',
+    'ALLOWED_VERSIONS': ('2.0'),
+    'DEFAULT_VERSION': '2.0',
+    'VERSION_PARAM': 'version',
     'DEFAULT_PAGINATION_CLASS':
         'cvat.apps.engine.pagination.CustomPagination',
     'PAGE_SIZE': 10,
     'DEFAULT_FILTER_BACKENDS': (
-        'rest_framework.filters.SearchFilter',
-        'django_filters.rest_framework.DjangoFilterBackend',
-        'rest_framework.filters.OrderingFilter'),
+        'cvat.apps.engine.filters.SearchFilter',
+        'cvat.apps.engine.filters.OrderingFilter',
+        'cvat.apps.engine.filters.JsonLogicFilter',
+        'cvat.apps.iam.filters.OrganizationFilterBackend'),
 
+    'SEARCH_PARAM': 'search',
     # Disable default handling of the 'format' query parameter by REST framework
     'URL_FORMAT_OVERRIDE': 'scheme',
     'DEFAULT_THROTTLE_CLASSES': [
@@ -168,17 +181,20 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/minute',
     },
+    'DEFAULT_METADATA_CLASS': 'rest_framework.metadata.SimpleMetadata',
+    'DEFAULT_SCHEMA_CLASS': 'cvat.apps.iam.schema.CustomAutoSchema',
 }
 
 REST_AUTH_REGISTER_SERIALIZERS = {
-    'REGISTER_SERIALIZER': 'cvat.apps.restrictions.serializers.RestrictedRegisterSerializer',
+    'REGISTER_SERIALIZER': 'cvat.apps.iam.serializers.RegisterSerializerEx',
 }
 
 REST_AUTH_SERIALIZERS = {
-    'PASSWORD_RESET_SERIALIZER': 'cvat.apps.authentication.serializers.PasswordResetSerializerEx',
+    'LOGIN_SERIALIZER': 'cvat.apps.iam.serializers.LoginSerializerEx',
+    'PASSWORD_RESET_SERIALIZER': 'cvat.apps.iam.serializers.PasswordResetSerializerEx',
 }
 
-if os.getenv('DJANGO_LOG_VIEWER_HOST'):
+if strtobool(os.getenv('CVAT_ANALYTICS', '0')):
     INSTALLED_APPS += ['cvat.apps.log_viewer']
 
 MIDDLEWARE = [
@@ -193,6 +209,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'dj_pagination.middleware.PaginationMiddleware',
+    'cvat.apps.iam.views.ContextMiddleware',
 ]
 
 UI_URL = ''
@@ -223,23 +240,33 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'cvat.wsgi.application'
 
-# Django Auth
-DJANGO_AUTH_TYPE = 'BASIC'
-DJANGO_AUTH_DEFAULT_GROUPS = []
+# IAM settings
+IAM_TYPE = 'BASIC'
+IAM_DEFAULT_ROLES = ['user']
+IAM_ADMIN_ROLE = 'admin'
+# Index in the list below corresponds to the priority (0 has highest priority)
+IAM_ROLES = [IAM_ADMIN_ROLE, 'business', 'user', 'worker']
+IAM_OPA_DATA_URL = 'http://opa:8181/v1/data'
 LOGIN_URL = 'rest_login'
 LOGIN_REDIRECT_URL = '/'
 
+# ORG settings
+ORG_INVITATION_CONFIRM = 'No'
+
+
 AUTHENTICATION_BACKENDS = [
-    'rules.permissions.ObjectPermissionBackend',
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 # https://github.com/pennersr/django-allauth
 ACCOUNT_EMAIL_VERIFICATION = 'none'
+ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
 # set UI url to redirect after a successful e-mail confirmation
 #changed from '/auth/login' to '/auth/email-confirmation' for email confirmation message
 ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = '/auth/email-confirmation'
+ACCOUNT_EMAIL_VERIFICATION_SENT_REDIRECT_URL = '/auth/email-verification-sent'
+INCORRECT_EMAIL_CONFIRMATION_URL = '/auth/incorrect-email-confirmation'
 
 OLD_PASSWORD_FIELD_ENABLED = True
 
@@ -258,14 +285,21 @@ RQ_QUEUES = {
         'PORT': 6379,
         'DB': 0,
         'DEFAULT_TIMEOUT': '24h'
+    },
+    'webhooks': {
+        'HOST': 'localhost',
+        'PORT': 6379,
+        'DB': 0,
+        'DEFAULT_TIMEOUT': '1h'
     }
 }
 
 NUCLIO = {
-    'SCHEME': 'http',
-    'HOST': 'localhost',
-    'PORT': 8070,
-    'DEFAULT_TIMEOUT': 120
+    'SCHEME': os.getenv('CVAT_NUCLIO_SCHEME', 'http'),
+    'HOST': os.getenv('CVAT_NUCLIO_HOST', 'localhost'),
+    'PORT': int(os.getenv('CVAT_NUCLIO_PORT', 8070)),
+    'DEFAULT_TIMEOUT': int(os.getenv('CVAT_NUCLIO_DEFAULT_TIMEOUT', 120)),
+    'FUNCTION_NAMESPACE': os.getenv('CVAT_NUCLIO_FUNCTION_NAMESPACE', 'nuclio')
 }
 
 RQ_SHOW_ADMIN_LINK = True
@@ -299,26 +333,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Cache DB access (e.g. for engine.task.get_frame)
-# https://github.com/Suor/django-cacheops
-CACHEOPS_REDIS = {
-    'host': 'localhost', # redis-server is on same machine
-    'port': 6379,        # default redis port
-    'db': 1,             # SELECT non-default redis database
-}
-
-CACHEOPS = {
-    # Automatically cache any Task.objects.get() calls for 15 minutes
-    # This also includes .first() and .last() calls.
-    'engine.task': {'ops': 'get', 'timeout': 60*15},
-
-    # Automatically cache any Job.objects.get() calls for 15 minutes
-    # This also includes .first() and .last() calls.
-    'engine.job': {'ops': 'get', 'timeout': 60*15},
-}
-
-CACHEOPS_DEGRADE_ON_FAILURE = True
-
 # Internationalization
 # https://docs.djangoproject.com/en/2.0/topics/i18n/
 
@@ -341,6 +355,7 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 os.makedirs(STATIC_ROOT, exist_ok=True)
 
+# Make sure to update other config files when upading these directories
 DATA_ROOT = os.path.join(BASE_DIR, 'data')
 LOGSTASH_DB = os.path.join(DATA_ROOT,'logstash.db')
 os.makedirs(DATA_ROOT, exist_ok=True)
@@ -352,6 +367,9 @@ os.makedirs(MEDIA_DATA_ROOT, exist_ok=True)
 
 CACHE_ROOT = os.path.join(DATA_ROOT, 'cache')
 os.makedirs(CACHE_ROOT, exist_ok=True)
+
+JOBS_ROOT = os.path.join(DATA_ROOT, 'jobs')
+os.makedirs(JOBS_ROOT, exist_ok=True)
 
 TASKS_ROOT = os.path.join(DATA_ROOT, 'tasks')
 os.makedirs(TASKS_ROOT, exist_ok=True)
@@ -373,6 +391,12 @@ os.makedirs(MIGRATIONS_LOGS_ROOT, exist_ok=True)
 
 CLOUD_STORAGE_ROOT = os.path.join(DATA_ROOT, 'storages')
 os.makedirs(CLOUD_STORAGE_ROOT, exist_ok=True)
+
+TMP_FILES_ROOT = os.path.join(DATA_ROOT, 'tmp')
+os.makedirs(TMP_FILES_ROOT, exist_ok=True)
+
+IAM_OPA_BUNDLE_PATH = os.path.join(STATIC_ROOT, 'opa', 'bundle.tar.gz')
+os.makedirs(Path(IAM_OPA_BUNDLE_PATH).parent, exist_ok=True)
 
 LOGGING = {
     'version': 1,
@@ -425,11 +449,6 @@ LOGGING = {
             'handlers': [],
             'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
         },
-
-        'revproxy': {
-            'handlers': ['console', 'server_file'],
-            'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG')
-        },
         'django': {
             'handlers': ['console', 'server_file'],
             'level': 'INFO',
@@ -448,24 +467,9 @@ LOCAL_LOAD_MAX_FILES_COUNT = 500
 LOCAL_LOAD_MAX_FILES_SIZE = 512 * 1024 * 1024  # 512 MB
 
 RESTRICTIONS = {
-    'user_agreements': [],
-
-    # this setting limits the number of tasks for the user
-    'task_limit': None,
-
-    # this setting limits the number of projects for the user
-    'project_limit': None,
-
-    # this setting reduces task visibility to owner and assignee only
-    'reduce_task_visibility': False,
-
-    # allow access to analytics component to users with the following roles
-    'analytics_access': (
-        'engine.role.observer',
-        'engine.role.annotator',
-        'engine.role.user',
-        'engine.role.admin',
-        ),
+    # allow access to analytics component to users with business role
+    # otherwise, only the administrator has access
+    'analytics_visibility': True,
 }
 
 # http://www.grantjenks.com/docs/diskcache/tutorial.html#djangocache
@@ -482,3 +486,145 @@ CACHES = {
 
 USE_CACHE = True
 
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    # tus upload protocol headers
+    'upload-offset',
+    'upload-length',
+    'tus-version',
+    'tus-resumable',
+
+    # extended upload protocol headers
+    'upload-start',
+    'upload-finish',
+    'upload-multiple',
+    'x-organization',
+]
+
+TUS_MAX_FILE_SIZE = 26843545600 # 25gb
+TUS_DEFAULT_CHUNK_SIZE = 104857600  # 100 mb
+
+# This setting makes request secure if X-Forwarded-Proto: 'https' header is specified by our proxy
+# More about forwarded headers - https://doc.traefik.io/traefik/getting-started/faq/#what-are-the-forwarded-headers-when-proxying-http-requests
+# How django uses X-Forwarded-Proto - https://docs.djangoproject.com/en/2.2/ref/settings/#secure-proxy-ssl-header
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Forwarded host - https://docs.djangoproject.com/en/4.0/ref/settings/#std:setting-USE_X_FORWARDED_HOST
+# Is used in TUS uploads to provide correct upload endpoint
+USE_X_FORWARDED_HOST = True
+
+# Django-sendfile requires to set SENDFILE_ROOT
+# https://github.com/moggers87/django-sendfile2
+SENDFILE_ROOT = BASE_DIR
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'CVAT REST API',
+    'DESCRIPTION': 'REST API for Computer Vision Annotation Tool (CVAT)',
+    # Statically set schema version. May also be an empty string. When used together with
+    # view versioning, will become '0.0.0 (v2)' for 'v2' versioned requests.
+    # Set VERSION to None if only the request version should be rendered.
+    'VERSION': __version__,
+    'CONTACT': {
+        'name': 'CVAT.ai team',
+        'url': 'https://github.com/cvat-ai/cvat',
+        'email': 'support@cvat.ai',
+    },
+    'LICENSE': {
+        'name': 'MIT License',
+        'url': 'https://en.wikipedia.org/wiki/MIT_License',
+    },
+
+    'SERVE_PUBLIC': True,
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAuthenticated'],
+
+    # https://swagger.io/docs/open-source-tools/swagger-ui/usage/configuration/
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'displayOperationId': True,
+        'displayRequestDuration': True,
+        'filter': True,
+        'showExtensions': True,
+    },
+    'TOS': 'https://www.google.com/policies/terms/',
+    'EXTERNAL_DOCS': {
+        'description': 'CVAT documentation',
+        'url': 'https://opencv.github.io/cvat/docs/',
+    },
+    # OTHER SETTINGS
+    # https://drf-spectacular.readthedocs.io/en/latest/settings.html
+
+    # TODO: Our current implementation does not suppose this.
+    # Need to reconsider this later. It happens, for example,
+    # in TaskSerializer for data-originated fields - they can be empty.
+    # https://github.com/tfranzel/drf-spectacular/issues/54
+    'COMPONENT_NO_READ_ONLY_REQUIRED': True,
+
+    # Required for correct file upload type (bytes)
+    'COMPONENT_SPLIT_REQUEST': True,
+
+    'ENUM_NAME_OVERRIDES': {
+        'ShapeType': 'cvat.apps.engine.models.ShapeType',
+        'OperationStatus': 'cvat.apps.engine.models.StateChoice',
+        'ChunkType': 'cvat.apps.engine.models.DataChoice',
+        'StorageMethod': 'cvat.apps.engine.models.StorageMethodChoice',
+        'JobStatus': 'cvat.apps.engine.models.StatusChoice',
+        'JobStage': 'cvat.apps.engine.models.StageChoice',
+        'StorageType': 'cvat.apps.engine.models.StorageChoice',
+        'SortingMethod': 'cvat.apps.engine.models.SortingMethod',
+    },
+
+    # Coercion of {pk} to {id} is controlled by SCHEMA_COERCE_PATH_PK. Additionally,
+    # some libraries (e.g. drf-nested-routers) use "_pk" suffixed path variables.
+    # This setting globally coerces path variables like "{user_pk}" to "{user_id}".
+    'SCHEMA_COERCE_PATH_PK_SUFFIX': True,
+    'SCHEMA_PATH_PREFIX': '/api',
+    'SCHEMA_PATH_PREFIX_TRIM': False,
+}
+
+# allauth configuration
+USE_ALLAUTH_SOCIAL_ACCOUNTS = strtobool(os.getenv('USE_ALLAUTH_SOCIAL_ACCOUNTS') or 'False')
+
+ACCOUNT_ADAPTER = 'cvat.apps.iam.adapters.DefaultAccountAdapterEx'
+
+# the same in UI
+ACCOUNT_USERNAME_MIN_LENGTH = 5
+ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True
+
+if USE_ALLAUTH_SOCIAL_ACCOUNTS:
+    SOCIALACCOUNT_ADAPTER = 'cvat.apps.iam.adapters.SocialAccountAdapterEx'
+    SOCIALACCOUNT_LOGIN_ON_GET = True
+    # It's required to define email in the case when a user has a private hidden email.
+    # (e.g in github account set keep my email addresses private)
+    # default = ACCOUNT_EMAIL_REQUIRED
+    SOCIALACCOUNT_QUERY_EMAIL = True
+    SOCIALACCOUNT_CALLBACK_CANCELLED_URL = '/auth/login'
+
+    GITHUB_CALLBACK_URL = 'http://localhost:8080/api/auth/github/login/callback/'
+    GOOGLE_CALLBACK_URL = 'http://localhost:8080/api/auth/google/login/callback/'
+
+    SOCIAL_AUTH_GOOGLE_CLIENT_ID = os.getenv('SOCIAL_AUTH_GOOGLE_CLIENT_ID')
+    SOCIAL_AUTH_GOOGLE_CLIENT_SECRET = os.getenv('SOCIAL_AUTH_GOOGLE_CLIENT_SECRET')
+
+    SOCIAL_AUTH_GITHUB_CLIENT_ID = os.getenv('SOCIAL_AUTH_GITHUB_CLIENT_ID')
+    SOCIAL_AUTH_GITHUB_CLIENT_SECRET = os.getenv('SOCIAL_AUTH_GITHUB_CLIENT_SECRET')
+
+    SOCIALACCOUNT_PROVIDERS = {
+        'google': {
+            'APP': {
+                'client_id': SOCIAL_AUTH_GOOGLE_CLIENT_ID,
+                'secret': SOCIAL_AUTH_GOOGLE_CLIENT_SECRET,
+                'key': ''
+            },
+            'SCOPE': [ 'profile', 'email', 'openid'],
+            'AUTH_PARAMS': {
+                'access_type': 'online',
+            }
+        },
+        'github': {
+            'APP': {
+                'client_id': SOCIAL_AUTH_GITHUB_CLIENT_ID,
+                'secret': SOCIAL_AUTH_GITHUB_CLIENT_SECRET,
+                'key': ''
+            },
+            'SCOPE': [ 'read:user', 'user:email' ],
+        },
+    }

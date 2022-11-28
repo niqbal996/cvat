@@ -4,8 +4,8 @@
 
 title: 'Simple command line to prepare dataset manifest file'
 linkTitle: 'Dataset manifest'
-weight: 29
-description: This section on [GitHub](https://github.com/openvinotoolkit/cvat/tree/develop/utils/dataset_manifest)
+weight: 30
+description: This section on [GitHub](https://github.com/cvat-ai/cvat/tree/develop/utils/dataset_manifest)
 
 ---
 
@@ -57,11 +57,10 @@ optional arguments:
                         Directory where the manifest file will be saved
 ```
 
-### Alternative way to use with openvino/cvat_server
+### Alternative way to use with cvat/server
 
 ```bash
-docker run -it --entrypoint python3 -v /path/to/host/data/:/path/inside/container/:rw openvino/cvat_server
-utils/dataset_manifest/create.py --output-dir /path/to/manifest/directory/ /path/to/data/
+docker run -it -u root --entrypoint bash -v /path/to/host/data/:/path/inside/container/:rw cvat/server -c "pip3 install -r utils/dataset_manifest/requirements.txt && python3 utils/dataset_manifest/create.py --output-dir /path/to/manifest/directory/ /path/to/data/"
 ```
 
 ### Examples of using
@@ -90,16 +89,16 @@ Create a dataset manifest with pattern (may be used `*`, `?`, `[]`):
 python create.py --output-dir ~/Documents "/home/${USER}/Documents/**/image*.jpeg"
 ```
 
-Create a dataset manifest with `openvino/cvat_server`:
+Create a dataset manifest with `cvat/server`:
 
 ```bash
-docker run -it --entrypoint python3 -v ~/Documents/data/:${HOME}/manifest/:rw openvino/cvat_server
+docker run -it --entrypoint python3 -v ~/Documents/data/:${HOME}/manifest/:rw cvat/server
 utils/dataset_manifest/create.py --output-dir ~/manifest/ ~/manifest/images/
 ```
 
 ### Examples of generated `manifest.jsonl` files
 
-A maifest file contains some intuitive information and some specific like:
+A manifest file contains some intuitive information and some specific like:
 
 `pts` - time at which the frame should be shown to the user
 `checksum` - `md5` hash sum for the specific image/frame
@@ -123,7 +122,7 @@ A maifest file contains some intuitive information and some specific like:
 ```json
 {"version":"1.0"}
 {"type":"images"}
-{"name":"image1","extension":".jpg","width":720,"height":405,"checksum":"548918ec4b56132a5cff1d4acabe9947"}
-{"name":"image2","extension":".jpg","width":183,"height":275,"checksum":"4b4eefd03cc6a45c1c068b98477fb639"}
-{"name":"image3","extension":".jpg","width":301,"height":167,"checksum":"0e454a6f4a13d56c82890c98be063663"}
+{"name":"image1","extension":".jpg","width":720,"height":405,"meta":{"related_images":[]},"checksum":"548918ec4b56132a5cff1d4acabe9947"}
+{"name":"image2","extension":".jpg","width":183,"height":275,"meta":{"related_images":[]},"checksum":"4b4eefd03cc6a45c1c068b98477fb639"}
+{"name":"image3","extension":".jpg","width":301,"height":167,"meta":{"related_images":[]},"checksum":"0e454a6f4a13d56c82890c98be063663"}
 ```

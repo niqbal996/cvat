@@ -1,4 +1,4 @@
-# Copyright (C) 2018 Intel Corporation
+# Copyright (C) 2018-2022 Intel Corporation
 #
 # SPDX-License-Identifier: MIT
 
@@ -23,7 +23,7 @@ from cvat.apps.dataset_repo.models import GitData, GitStatusChoice
 orig_execute = git.cmd.Git.execute
 GIT_URL = "https://1.2.3.4/repo/exist.git"
 PARSE_GIT_URL = "git@1.2.3.4:repo/exist.git"
-
+EXPORT_FORMAT = "CVAT for video 1.1"
 
 def generate_image_file(filename, size=(100, 50)):
     f = BytesIO()
@@ -49,7 +49,6 @@ class ForceLogin:
     def __exit__(self, exception_type, exception_value, traceback):
         if self.user:
             self.client.logout()
-
 
 class GitRemote:
     def pull(self, refspec=None, progress=None, **kwargs):
@@ -141,7 +140,6 @@ class TestGit(Git):
     def reclone(self):
         self._reclone()
 
-
 class GitDatasetRepoTest(APITestCase):
     class FakeGit:
         def __init__(self, url):
@@ -191,16 +189,16 @@ class GitDatasetRepoTest(APITestCase):
             ]
         }
 
-    def _run_api_v1_job_id_annotation(self, jid, data, user):
+    def _run_api_v2_job_id_annotation(self, jid, data, user):
         with ForceLogin(user, self.client):
-            response = self.client.patch('/api/v1/jobs/{}/annotations?action=create'.format(jid),
+            response = self.client.patch('/api/jobs/{}/annotations?action=create'.format(jid),
                 data=data, format="json")
 
         return response
 
     def _get_jobs(self, task_id):
         with ForceLogin(self.admin, self.client):
-            response = self.client.get("/api/v1/tasks/{}/jobs".format(task_id))
+            response = self.client.get("/api/tasks/{}/jobs".format(task_id))
         return response.data
 
     def _create_task(self, init_repos=False):
@@ -224,15 +222,15 @@ class GitDatasetRepoTest(APITestCase):
         images["image_quality"] = 75
 
         with ForceLogin(self.user, self.client):
-            response = self.client.post('/api/v1/tasks', data=data, format="json")
+            response = self.client.post('/api/tasks', data=data, format="json")
             assert response.status_code == status.HTTP_201_CREATED, response.status_code
             tid = response.data["id"]
 
-            response = self.client.post("/api/v1/tasks/%s/data" % tid,
+            response = self.client.post("/api/tasks/%s/data" % tid,
                                         data=images)
             assert response.status_code == status.HTTP_202_ACCEPTED, response.status_code
 
-            response = self.client.get("/api/v1/tasks/%s" % tid)
+            response = self.client.get("/api/tasks/%s" % tid)
             task = response.data
 
             db_task = Task.objects.get(pk=task["id"])
@@ -414,6 +412,7 @@ class GitDatasetRepoTest(APITestCase):
         db_task = Task.objects.get(pk=task["id"])
         db_git = GitData()
         db_git.url = GIT_URL
+        db_git.format = EXPORT_FORMAT
         db_git.path = "annotation.zip"
         db_git.sync_date = timezone.now()
 
@@ -429,7 +428,7 @@ class GitDatasetRepoTest(APITestCase):
     @mock.patch('git.Repo.clone_from', new=GitRepo.clone)
     def test_request_initial_create(self):
         task = self._create_task(init_repos=False)
-        initial_create(task["id"], GIT_URL, 1, self.user)
+        initial_create(task["id"], GIT_URL, EXPORT_FORMAT, 1, self.user)
         self.assertTrue(osp.isdir(osp.join(task["repos_path"], '.git')))
         git_repo = git.Repo(task["repos_path"])
         with git_repo.config_reader() as cw:
@@ -444,7 +443,7 @@ class GitDatasetRepoTest(APITestCase):
     def test_request_push(self):
         task = self._create_task(init_repos=False)
         tid = task["id"]
-        initial_create(tid, GIT_URL, 1, self.user)
+        initial_create(tid, GIT_URL, EXPORT_FORMAT, 1, self.user)
         self.add_file(task["repos_path"], "file.txt")
         push(tid, self.user, "", "")
 
@@ -459,7 +458,7 @@ class GitDatasetRepoTest(APITestCase):
     def test_push_and_request_get(self):
         task = self._create_task(init_repos=False)
         tid = task["id"]
-        initial_create(tid, GIT_URL, 1, self.user)
+        initial_create(tid, GIT_URL, EXPORT_FORMAT, 1, self.user)
         self.add_file(task["repos_path"], "file.txt")
         push(tid, self.user, "", "")
         response = get(tid, self.user)
@@ -474,7 +473,7 @@ class GitDatasetRepoTest(APITestCase):
     def test_request_get(self):
         task = self._create_task(init_repos=False)
         tid = task["id"]
-        initial_create(tid, GIT_URL, 1, self.user)
+        initial_create(tid, GIT_URL, EXPORT_FORMAT, 1, self.user)
         response = get(tid, self.user)
 
         self.assertTrue(response["status"]["value"], "not sync")
@@ -487,7 +486,7 @@ class GitDatasetRepoTest(APITestCase):
     def test_request_on_save(self):
         task = self._create_task(init_repos=False)
         tid = task["id"]
-        initial_create(tid, GIT_URL, 1, self.user)
+        initial_create(tid, GIT_URL, EXPORT_FORMAT, 1, self.user)
 
         jobs = self._get_jobs(tid)
         ann = {
@@ -508,6 +507,6 @@ class GitDatasetRepoTest(APITestCase):
             ],
             "tracks": []
         }
-        self._run_api_v1_job_id_annotation(jobs[0]["id"], ann, self.user)
+        self._run_api_v2_job_id_annotation(jobs[0]["id"], ann, self.user)
         db_git = GitData()
         self.assertEqual(db_git.status, GitStatusChoice.NON_SYNCED)

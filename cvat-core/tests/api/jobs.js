@@ -1,15 +1,18 @@
-// Copyright (C) 2020 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 // Setup mock for a server
 jest.mock('../../src/server-proxy', () => {
-    const mock = require('../mocks/server-proxy.mock');
-    return mock;
+    return {
+        __esModule: true,
+        default: require('../mocks/server-proxy.mock'),
+    };
 });
 
 // Initialize api
-window.cvat = require('../../src/api');
+window.cvat = require('../../src/api').default;
 
 const { Job } = require('../../src/session');
 
@@ -25,8 +28,8 @@ describe('Feature: get a list of jobs', () => {
             expect(el).toBeInstanceOf(Job);
         }
 
-        expect(result[0].task.id).toBe(3);
-        expect(result[0].task).toBe(result[1].task);
+        expect(result[0].taskId).toBe(3);
+        expect(result[0].taskId).toBe(result[1].taskId);
     });
 
     test('get jobs by an unknown task id', async () => {
@@ -89,18 +92,17 @@ describe('Feature: get a list of jobs', () => {
 });
 
 describe('Feature: save job', () => {
-    test('save status of a job', async () => {
-        let result = await window.cvat.jobs.get({
+    test('save stage and state of a job', async () => {
+        const result = await window.cvat.jobs.get({
             jobID: 1,
         });
 
-        result[0].status = 'validation';
-        await result[0].save();
+        result[0].stage = 'validation';
+        result[0].state = 'new';
+        const newJob = await result[0].save();
 
-        result = await window.cvat.jobs.get({
-            jobID: 1,
-        });
-        expect(result[0].status).toBe('validation');
+        expect(newJob.stage).toBe('validation');
+        expect(newJob.state).toBe('new');
     });
 
     test('save invalid status of a job', async () => {
@@ -108,9 +110,11 @@ describe('Feature: save job', () => {
             jobID: 1,
         });
 
-        await result[0].save();
         expect(() => {
-            result[0].status = 'invalid';
+            result[0].state = 'invalid';
+        }).toThrow(window.cvat.exceptions.ArgumentError);
+        expect(() => {
+            result[0].stage = 'invalid';
         }).toThrow(window.cvat.exceptions.ArgumentError);
     });
 });

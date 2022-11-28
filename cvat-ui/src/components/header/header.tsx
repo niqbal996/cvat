@@ -1,11 +1,12 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import './styles.scss';
-import React from 'react';
+import React, { useCallback } from 'react';
 import { connect } from 'react-redux';
-import { useHistory } from 'react-router';
+import { useHistory, useLocation } from 'react-router';
 import { Row, Col } from 'antd/lib/grid';
 import Icon, {
     SettingOutlined,
@@ -17,6 +18,9 @@ import Icon, {
     QuestionCircleOutlined,
     CaretDownOutlined,
     ControlOutlined,
+    UserOutlined,
+    TeamOutlined,
+    PlusOutlined,
 } from '@ant-design/icons';
 import Layout from 'antd/lib/layout';
 import Button from 'antd/lib/button';
@@ -24,15 +28,17 @@ import Menu from 'antd/lib/menu';
 import Dropdown from 'antd/lib/dropdown';
 import Modal from 'antd/lib/modal';
 import Text from 'antd/lib/typography/Text';
+import Select from 'antd/lib/select';
 
-import getCore from 'cvat-core-wrapper';
+import { getCore } from 'cvat-core-wrapper';
 import consts from 'consts';
 
-import { CVATLogo, AccountIcon } from 'icons';
+import { CVATLogo } from 'icons';
 import ChangePasswordDialog from 'components/change-password-modal/change-password-modal';
+import CVATTooltip from 'components/common/cvat-tooltip';
 import { switchSettingsDialog as switchSettingsDialogAction } from 'actions/settings-actions';
 import { logoutAsync, authActions } from 'actions/auth-actions';
-import { CombinedState } from 'reducers/interfaces';
+import { CombinedState } from 'reducers';
 import SettingsModal from './settings-modal/settings-modal';
 
 const core = getCore();
@@ -67,6 +73,9 @@ interface StateToProps {
     isAnalyticsPluginActive: boolean;
     isModelsPluginActive: boolean;
     isGitPluginActive: boolean;
+    organizationsFetching: boolean;
+    organizationsList: any[];
+    currentOrganization: any | null;
 }
 
 interface DispatchToProps {
@@ -88,6 +97,7 @@ function mapStateToProps(state: CombinedState): StateToProps {
         about: { server, packageVersion },
         shortcuts: { normalizedKeyMap },
         settings: { showDialog: settingsDialogShown },
+        organizations: { fetching: organizationsFetching, current: currentOrganization, list: organizationsList },
     } = state;
 
     return {
@@ -118,6 +128,9 @@ function mapStateToProps(state: CombinedState): StateToProps {
         isAnalyticsPluginActive: list.ANALYTICS,
         isModelsPluginActive: list.MODELS,
         isGitPluginActive: list.GIT_INTEGRATION,
+        organizationsFetching,
+        currentOrganization,
+        organizationsList,
     };
 }
 
@@ -139,21 +152,24 @@ function HeaderContainer(props: Props): JSX.Element {
         changePasswordFetching,
         settingsDialogShown,
         switchSettingsShortcut,
-        onLogout,
         switchSettingsDialog,
         switchChangePasswordDialog,
         renderChangePasswordItem,
         isAnalyticsPluginActive,
         isModelsPluginActive,
+        organizationsFetching,
+        currentOrganization,
+        organizationsList,
     } = props;
 
     const {
-        CHANGELOG_URL, LICENSE_URL, GITTER_URL, FORUM_URL, GITHUB_URL,
+        CHANGELOG_URL, LICENSE_URL, GITTER_URL, GITHUB_URL, GUIDE_URL, DISCORD_URL,
     } = consts;
 
     const history = useHistory();
+    const location = useLocation();
 
-    function showAboutModal(): void {
+    const showAboutModal = useCallback((): void => {
         Modal.info({
             title: `${tool.name}`,
             content: (
@@ -183,7 +199,7 @@ function HeaderContainer(props: Props): JSX.Element {
                         </Col>
                         <Col>
                             <a href={LICENSE_URL} target='_blank' rel='noopener noreferrer'>
-                                License
+                                MIT License
                             </a>
                         </Col>
                         <Col>
@@ -192,8 +208,8 @@ function HeaderContainer(props: Props): JSX.Element {
                             </a>
                         </Col>
                         <Col>
-                            <a href={FORUM_URL} target='_blank' rel='noopener noreferrer'>
-                                Forum on Intel Developer Zone
+                            <a href={DISCORD_URL} target='_blank' rel='noopener noreferrer'>
+                                Find us on Discord
                             </a>
                         </Col>
                     </Row>
@@ -206,58 +222,172 @@ function HeaderContainer(props: Props): JSX.Element {
                 },
             },
         });
-    }
+    }, [tool]);
 
-    const menu = (
-        <Menu className='cvat-header-menu' mode='vertical'>
+    const resetOrganization = (): void => {
+        localStorage.removeItem('currentOrganization');
+        if (/(webhooks)|(\d+)/.test(window.location.pathname)) {
+            window.location.pathname = '/';
+        } else {
+            window.location.reload();
+        }
+    };
+
+    const setNewOrganization = (organization: any): void => {
+        if (!currentOrganization || currentOrganization.slug !== organization.slug) {
+            localStorage.setItem('currentOrganization', organization.slug);
+            if (/\d+/.test(window.location.pathname)) {
+                // a resource is opened (task/job/etc.)
+                window.location.pathname = '/';
+            } else {
+                window.location.reload();
+            }
+        }
+    };
+
+    const userMenu = (
+        <Menu className='cvat-header-menu'>
             {user.isStaff && (
                 <Menu.Item
+                    icon={<ControlOutlined />}
+                    key='admin_page'
                     onClick={(): void => {
                         // false positive
                         // eslint-disable-next-line
                         window.open(`${tool.server.host}/admin`, '_blank');
                     }}
                 >
-                    <ControlOutlined />
                     Admin page
                 </Menu.Item>
             )}
+            <Menu.SubMenu
+                disabled={organizationsFetching}
+                key='organization'
+                title='Organization'
+                icon={organizationsFetching ? <LoadingOutlined /> : <TeamOutlined />}
+            >
+                {currentOrganization ? (
+                    <Menu.Item icon={<SettingOutlined />} key='open_organization' onClick={() => history.push('/organization')} className='cvat-header-menu-open-organization'>
+                        Settings
+                    </Menu.Item>
+                ) : null}
+                <Menu.Item icon={<PlusOutlined />} key='create_organization' onClick={() => history.push('/organizations/create')} className='cvat-header-menu-create-organization'>Create</Menu.Item>
+                { organizationsList.length > 5 ? (
+                    <Menu.Item
+                        key='switch_organization'
+                        onClick={() => {
+                            Modal.confirm({
+                                title: 'Select an organization',
+                                okButtonProps: {
+                                    style: { display: 'none' },
+                                },
+                                content: (
+                                    <Select
+                                        showSearch
+                                        className='cvat-modal-organization-selector'
+                                        value={currentOrganization?.slug}
+                                        onChange={(value: string) => {
+                                            if (value === '$personal') {
+                                                resetOrganization();
+                                                return;
+                                            }
 
-            <Menu.Item title={`Press ${switchSettingsShortcut} to switch`} onClick={() => switchSettingsDialog(true)}>
-                <SettingOutlined />
+                                            const [organization] = organizationsList
+                                                .filter((_organization): boolean => _organization.slug === value);
+                                            if (organization) {
+                                                setNewOrganization(organization);
+                                            }
+                                        }}
+                                    >
+                                        <Select.Option value='$personal'>Personal workspace</Select.Option>
+                                        {organizationsList.map((organization: any): JSX.Element => {
+                                            const { slug } = organization;
+                                            return <Select.Option key={slug} value={slug}>{slug}</Select.Option>;
+                                        })}
+                                    </Select>
+                                ),
+                            });
+                        }}
+                    >
+                        Switch organization
+                    </Menu.Item>
+                ) : (
+                    <>
+                        <Menu.Divider />
+                        <Menu.ItemGroup>
+                            <Menu.Item
+                                className={!currentOrganization ?
+                                    'cvat-header-menu-active-organization-item' : 'cvat-header-menu-organization-item'}
+                                key='$personal'
+                                onClick={resetOrganization}
+                            >
+                                Personal workspace
+                            </Menu.Item>
+                            {organizationsList.map((organization: any): JSX.Element => (
+                                <Menu.Item
+                                    className={currentOrganization?.slug === organization.slug ?
+                                        'cvat-header-menu-active-organization-item' : 'cvat-header-menu-organization-item'}
+                                    key={organization.slug}
+                                    onClick={() => setNewOrganization(organization)}
+                                >
+                                    {organization.slug}
+                                </Menu.Item>
+                            ))}
+                        </Menu.ItemGroup>
+                    </>
+                )}
+            </Menu.SubMenu>
+            <Menu.Item
+                icon={<SettingOutlined />}
+                key='settings'
+                title={`Press ${switchSettingsShortcut} to switch`}
+                onClick={() => switchSettingsDialog(true)}
+            >
                 Settings
             </Menu.Item>
-            <Menu.Item onClick={showAboutModal}>
-                <InfoCircleOutlined />
+            <Menu.Item icon={<InfoCircleOutlined />} key='about' onClick={() => showAboutModal()}>
                 About
             </Menu.Item>
             {renderChangePasswordItem && (
                 <Menu.Item
+                    key='change_password'
+                    icon={changePasswordFetching ? <LoadingOutlined /> : <EditOutlined />}
                     className='cvat-header-menu-change-password'
                     onClick={(): void => switchChangePasswordDialog(true)}
                     disabled={changePasswordFetching}
                 >
-                    {changePasswordFetching ? <LoadingOutlined /> : <EditOutlined />}
                     Change password
                 </Menu.Item>
             )}
 
-            <Menu.Item onClick={onLogout} disabled={logoutFetching}>
-                {logoutFetching ? <LoadingOutlined /> : <LogoutOutlined />}
+            <Menu.Item
+                key='logout'
+                icon={logoutFetching ? <LoadingOutlined /> : <LogoutOutlined />}
+                onClick={() => {
+                    history.push('/auth/logout');
+                }}
+                disabled={logoutFetching}
+            >
                 Logout
             </Menu.Item>
         </Menu>
     );
+
+    const getButtonClassName = (value: string): string => {
+        // eslint-disable-next-line security/detect-non-literal-regexp
+        const regex = new RegExp(`${value}$`);
+        return location.pathname.match(regex) ? 'cvat-header-button cvat-active-header-button' : 'cvat-header-button';
+    };
 
     return (
         <Layout.Header className='cvat-header'>
             <div className='cvat-left-header'>
                 <Icon className='cvat-logo-icon' component={CVATLogo} />
                 <Button
-                    className='cvat-header-button'
+                    className={getButtonClassName('projects')}
                     type='link'
                     value='projects'
-                    href='/projects'
+                    href='/projects?page=1'
                     onClick={(event: React.MouseEvent): void => {
                         event.preventDefault();
                         history.push('/projects');
@@ -266,32 +396,44 @@ function HeaderContainer(props: Props): JSX.Element {
                     Projects
                 </Button>
                 <Button
-                    className='cvat-header-button'
+                    className={getButtonClassName('tasks')}
                     type='link'
                     value='tasks'
                     href='/tasks?page=1'
                     onClick={(event: React.MouseEvent): void => {
                         event.preventDefault();
-                        history.push('/tasks?page=1');
+                        history.push('/tasks');
                     }}
                 >
                     Tasks
                 </Button>
                 <Button
-                    className='cvat-header-button'
+                    className={getButtonClassName('jobs')}
+                    type='link'
+                    value='jobs'
+                    href='/jobs?page=1'
+                    onClick={(event: React.MouseEvent): void => {
+                        event.preventDefault();
+                        history.push('/jobs');
+                    }}
+                >
+                    Jobs
+                </Button>
+                <Button
+                    className={getButtonClassName('cloudstorages')}
                     type='link'
                     value='cloudstorages'
                     href='/cloudstorages?page=1'
                     onClick={(event: React.MouseEvent): void => {
                         event.preventDefault();
-                        history.push('/cloudstorages?page=1');
+                        history.push('/cloudstorages');
                     }}
                 >
                     Cloud Storages
                 </Button>
-                {isModelsPluginActive && (
+                {isModelsPluginActive ? (
                     <Button
-                        className='cvat-header-button'
+                        className={getButtonClassName('models')}
                         type='link'
                         value='models'
                         href='/models'
@@ -302,8 +444,8 @@ function HeaderContainer(props: Props): JSX.Element {
                     >
                         Models
                     </Button>
-                )}
-                {isAnalyticsPluginActive && (
+                ) : null}
+                {isAnalyticsPluginActive ? (
                     <Button
                         className='cvat-header-button'
                         type='link'
@@ -317,42 +459,57 @@ function HeaderContainer(props: Props): JSX.Element {
                     >
                         Analytics
                     </Button>
-                )}
+                ) : null}
             </div>
             <div className='cvat-right-header'>
-                <Button
-                    className='cvat-header-button'
-                    type='link'
-                    href={GITHUB_URL}
-                    onClick={(event: React.MouseEvent): void => {
-                        event.preventDefault();
-                        window.open(GITHUB_URL, '_blank');
-                    }}
-                >
-                    <GithubOutlined />
-                    <Text className='cvat-text-color'>GitHub</Text>
-                </Button>
-                <Button
-                    className='cvat-header-button'
-                    type='link'
-                    href='https://openvinotoolkit.github.io/cvat/docs'
-                    onClick={(event: React.MouseEvent): void => {
-                        event.preventDefault();
-                        // false positive
-                        // eslint-disable-next-line
-                        window.open('https://openvinotoolkit.github.io/cvat/docs');
-                    }}
-                >
-                    <QuestionCircleOutlined />
-                    Help
-                </Button>
-                <Dropdown overlay={menu} className='cvat-header-menu-dropdown'>
+                <CVATTooltip overlay='Click to open repository'>
+                    <Button
+                        icon={<GithubOutlined />}
+                        size='large'
+                        className='cvat-header-button'
+                        type='link'
+                        href={GITHUB_URL}
+                        onClick={(event: React.MouseEvent): void => {
+                            event.preventDefault();
+                            // false alarm
+                            // eslint-disable-next-line security/detect-non-literal-fs-filename
+                            window.open(GITHUB_URL, '_blank');
+                        }}
+                    />
+                </CVATTooltip>
+                <CVATTooltip overlay='Click to open guide'>
+                    <Button
+                        icon={<QuestionCircleOutlined />}
+                        size='large'
+                        className='cvat-header-button'
+                        type='link'
+                        href={GUIDE_URL}
+                        onClick={(event: React.MouseEvent): void => {
+                            event.preventDefault();
+                            // false alarm
+                            // eslint-disable-next-line security/detect-non-literal-fs-filename
+                            window.open(GUIDE_URL, '_blank');
+                        }}
+                    />
+                </CVATTooltip>
+                <Dropdown placement='bottomRight' overlay={userMenu} className='cvat-header-menu-user-dropdown'>
                     <span>
-                        <Icon className='cvat-header-account-icon' component={AccountIcon} />
-                        <Text strong>
-                            {user.username.length > 14 ? `${user.username.slice(0, 10)} ...` : user.username}
-                        </Text>
-                        <CaretDownOutlined className='cvat-header-menu-icon' />
+                        <UserOutlined className='cvat-header-dropdown-icon' />
+                        <Row>
+                            <Col span={24}>
+                                <Text strong className='cvat-header-menu-user-dropdown-user'>
+                                    {user.username.length > 14 ? `${user.username.slice(0, 10)} ...` : user.username}
+                                </Text>
+                            </Col>
+                            { currentOrganization ? (
+                                <Col span={24}>
+                                    <Text className='cvat-header-menu-user-dropdown-organization'>
+                                        {currentOrganization.slug}
+                                    </Text>
+                                </Col>
+                            ) : null }
+                        </Row>
+                        <CaretDownOutlined className='cvat-header-dropdown-icon' />
                     </span>
                 </Dropdown>
             </div>

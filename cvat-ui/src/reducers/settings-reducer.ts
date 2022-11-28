@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -8,10 +8,10 @@ import { BoundariesActionTypes } from 'actions/boundaries-actions';
 import { AuthActionTypes } from 'actions/auth-actions';
 import { SettingsActionTypes } from 'actions/settings-actions';
 import { AnnotationActionTypes } from 'actions/annotation-actions';
-
 import {
     SettingsState, GridColor, FrameSpeed, ColorBy, DimensionType,
-} from './interfaces';
+} from 'reducers';
+import { ObjectState, ShapeType } from 'cvat-core-wrapper';
 
 const defaultState: SettingsState = {
     shapes: {
@@ -32,10 +32,15 @@ const defaultState: SettingsState = {
         showAllInterpolationTracks: false,
         intelligentPolygonCrop: true,
         defaultApproxPolyAccuracy: 9,
+        textFontSize: 14,
+        controlPointsSize: 5,
+        textPosition: 'auto',
+        textContent: 'id,source,label,attributes,descriptions',
         toolsBlockerState: {
             algorithmsLocked: false,
             buttonVisible: false,
         },
+        showTagsOnFrame: true,
     },
     player: {
         canvasBackgroundColor: '#ffffff',
@@ -43,6 +48,8 @@ const defaultState: SettingsState = {
         frameSpeed: FrameSpeed.Usual,
         resetZoom: false,
         rotateAll: false,
+        smoothImage: true,
+        showDeletedFrames: false,
         grid: false,
         gridSize: 100,
         gridColor: GridColor.White,
@@ -183,6 +190,52 @@ export default (state = defaultState, action: AnyAction): SettingsState => {
                 },
             };
         }
+        case SettingsActionTypes.SWITCH_SMOOTH_IMAGE: {
+            return {
+                ...state,
+                player: {
+                    ...state.player,
+                    smoothImage: action.payload.smoothImage,
+                },
+            };
+        }
+        case SettingsActionTypes.SWITCH_TEXT_FONT_SIZE: {
+            return {
+                ...state,
+                workspace: {
+                    ...state.workspace,
+                    textFontSize: action.payload.fontSize,
+                },
+            };
+        }
+        case SettingsActionTypes.SWITCH_CONTROL_POINTS_SIZE: {
+            return {
+                ...state,
+                workspace: {
+                    ...state.workspace,
+                    controlPointsSize: action.payload.controlPointsSize,
+                },
+            };
+        }
+        case SettingsActionTypes.SWITCH_TEXT_POSITION: {
+            return {
+                ...state,
+                workspace: {
+                    ...state.workspace,
+                    textPosition: action.payload.position,
+                },
+            };
+        }
+        case SettingsActionTypes.SWITCH_TEXT_CONTENT: {
+            const { textContent } = action.payload;
+            return {
+                ...state,
+                workspace: {
+                    ...state.workspace,
+                    textContent,
+                },
+            };
+        }
         case SettingsActionTypes.CHANGE_BRIGHTNESS_LEVEL: {
             return {
                 ...state,
@@ -312,6 +365,45 @@ export default (state = defaultState, action: AnyAction): SettingsState => {
                 ...action.payload.settings,
             };
         }
+        case SettingsActionTypes.SWITCH_SHOWING_DELETED_FRAMES: {
+            return {
+                ...state,
+                player: {
+                    ...state.player,
+                    showDeletedFrames: action.payload.showDeletedFrames,
+                },
+            };
+        }
+        case SettingsActionTypes.SWITCH_SHOWING_TAGS_ON_FRAME: {
+            return {
+                ...state,
+                workspace: {
+                    ...state.workspace,
+                    showTagsOnFrame: action.payload.showTagsOnFrame,
+                },
+            };
+        }
+        case AnnotationActionTypes.UPLOAD_JOB_ANNOTATIONS_SUCCESS:
+        case AnnotationActionTypes.CREATE_ANNOTATIONS_SUCCESS:
+        case AnnotationActionTypes.CHANGE_FRAME_SUCCESS: {
+            const { states } = action.payload;
+            if (states.some((_state: ObjectState): boolean => _state.shapeType === ShapeType.MASK)) {
+                const MIN_OPACITY = 30;
+                const { shapes: { opacity } } = state;
+                if (opacity < MIN_OPACITY) {
+                    return {
+                        ...state,
+                        shapes: {
+                            ...state.shapes,
+                            opacity: MIN_OPACITY,
+                            selectedOpacity: MIN_OPACITY * 2,
+                        },
+                    };
+                }
+            }
+
+            return state;
+        }
         case BoundariesActionTypes.RESET_AFTER_ERROR:
         case AnnotationActionTypes.GET_JOB_SUCCESS: {
             const { job } = action.payload;
@@ -320,11 +412,11 @@ export default (state = defaultState, action: AnyAction): SettingsState => {
                 ...state,
                 player: {
                     ...state.player,
-                    resetZoom: job && job.task.mode === 'annotation',
+                    resetZoom: job && job.mode === 'annotation',
                 },
                 shapes: {
                     ...defaultState.shapes,
-                    ...(job.task.dimension === DimensionType.DIM_3D ?
+                    ...(job.dimension === DimensionType.DIM_3D ?
                         {
                             opacity: 40,
                             selectedOpacity: 60,

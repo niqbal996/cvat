@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -14,7 +14,7 @@ import Button from 'antd/lib/button';
 
 import ColorPicker from 'components/annotation-page/standard-workspace/objects-side-bar/color-picker';
 import { ColorizeIcon } from 'icons';
-import { ColorBy, CombinedState, DimensionType } from 'reducers/interfaces';
+import { ColorBy, CombinedState, DimensionType } from 'reducers';
 import { collapseAppearance as collapseAppearanceAction } from 'actions/annotation-actions';
 import {
     changeShapesColorBy as changeShapesColorByAction,
@@ -121,7 +121,7 @@ function AppearanceBlock(props: Props): JSX.Element {
         jobInstance,
     } = props;
 
-    const is2D = jobInstance.task.dimension === DimensionType.DIM_2D;
+    const is2D = jobInstance.dimension === DimensionType.DIM_2D;
 
     return (
         <Collapse

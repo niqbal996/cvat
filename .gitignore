@@ -4,13 +4,12 @@
 /share/
 /static/
 /db.sqlite3
-/.env
+/.*env*
 /keys
 /logs
 /profiles
 /ssh/*
 !/ssh/README.md
-node_modules
 /Mask_RCNN/
 /letsencrypt-webroot/
 
@@ -20,9 +19,7 @@ __pycache__
 *.pyc
 ._*
 .coverage
-
-# Ignore development npm files
-node_modules
+.husky/
 
 # Ignore npm logs file
 npm-debug.log*
@@ -47,3 +44,22 @@ yarn-error.log*
 /site/resources/
 /site/node_modules/
 /site/tech-doc-hugo
+/site/.hugo_build.lock
+
+# Ignore all the installed packages
+node_modules
+
+# Ignore all js dists
+cvat-data/dist
+cvat-core/dist
+cvat-canvas/dist
+cvat-canvas3d/dist
+cvat-ui/dist
+
+# produced by npm run docs in cvat-core
+cvat-core/docs
+# produced by npm run test in cvat-core
+cvat-core/reports
+# produced by prepare in the root package.json script
+.husky
+

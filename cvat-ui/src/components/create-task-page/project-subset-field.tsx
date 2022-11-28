@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 Intel Corporation
+// Copyright (C) 2019-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import Autocomplete from 'antd/lib/auto-complete';
 
 import consts from 'consts';
-import getCore from 'cvat-core-wrapper';
+import { getCore } from 'cvat-core-wrapper';
 
 const core = getCore();
 
@@ -32,7 +32,7 @@ export default function ProjectSubsetField(props: Props): JSX.Element {
 
     useEffect(() => {
         if (!projectSubsets?.length && projectId) {
-            core.projects.get({ id: projectId, withoutTasks: true }).then((response: ProjectPartialWithSubsets[]) => {
+            core.projects.get({ id: projectId }).then((response: ProjectPartialWithSubsets[]) => {
                 if (response.length) {
                     const [project] = response;
                     setInternalSubsets(

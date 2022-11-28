@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Intel Corporation
+// Copyright (C) 2021-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -51,8 +51,8 @@ context('Call HOC component each render.', () => {
     };
 
     function checkNumberOfPointsValue(objectType, numberOfPoints) {
-        cy.get(`.cvat-draw-${objectType}-control`).trigger('mouseover');
-        cy.get(`.cvat-draw-${objectType}-popover-visible`).within(() => {
+        cy.interactControlButton(`draw-${objectType}`);
+        cy.get(`.cvat-draw-${objectType}-popover`).within(() => {
             cy.get('.cvat-draw-shape-popover-points-selector')
                 .find('input')
                 .should('have.attr', 'value', numberOfPoints);

@@ -1,42 +1,45 @@
-name: Linter
+name: ESLint
 on: pull_request
 jobs:
-  ESLint:
+  Linter:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
-            node-version: 12
+            node-version: '16.x'
+      - id: files
+        uses: jitterbit/get-changed-files@v1
+        continue-on-error: true
 
       - name: Run checks
+        env:
+          PR_FILES_AM: ${{ steps.files.outputs.added_modified }}
+          PR_FILES_RENAMED: ${{ steps.files.outputs.renamed }}
         run: |
-          URL="https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files"
-          PR_FILES=$(curl -s -X GET -G $URL | jq -r '.[] | select(.status != "removed") | .filename')
-          for files in $PR_FILES; do
-            extension="${files##*.}"
-            if [[ $extension == 'js' || $extension == 'ts' || $extension == 'jsx' || $extension == 'tsx' ]]; then
-              changed_files_eslint+=" ${files}"
-            fi
+          PR_FILES="$PR_FILES_AM $PR_FILES_RENAMED"
+          for FILE in $PR_FILES; do
+              EXTENSION="${FILE##*.}"
+              if [[ $EXTENSION == 'js' || $EXTENSION == 'ts' || $EXTENSION == 'jsx' || $EXTENSION == 'tsx' ]]; then
+                  CHANGED_FILES+=" $FILE"
+              fi
           done
 
-          if [[ ! -z ${changed_files_eslint} ]]; then
-            for package_files in `find -maxdepth 2 -name "package.json" -type f`; do
-              cd $(dirname $package_files) && npm ci && cd ${{ github.workspace }}
-            done
-            npm install eslint-detailed-reporter --save-dev
+          if [[ ! -z $CHANGED_FILES ]]; then
+            yarn install --frozen-lockfile && cd tests && yarn install --frozen-lockfile && cd ..
+            yarn add eslint-detailed-reporter -D -W
             mkdir -p eslint_report
 
-            echo "ESLint version: "`npx eslint --version`
-            echo "The files will be checked: "`echo ${changed_files_eslint}`
-            npx eslint ${changed_files_eslint} -f node_modules/eslint-detailed-reporter/lib/detailed.js -o ./eslint_report/eslint_checks.html
+            echo "ESLint version: "$(npx eslint --version)
+            echo "The files will be checked: "$(echo $CHANGED_FILES)
+            npx eslint $CHANGED_FILES -f node_modules/eslint-detailed-reporter/lib/detailed.js -o ./eslint_report/eslint_checks.html
           else
             echo "No files with the \"js|ts|jsx|tsx\" extension found"
           fi
 
       - name: Upload artifacts
         if: failure()
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3.1.1
         with:
           name: eslint_report
           path: eslint_report

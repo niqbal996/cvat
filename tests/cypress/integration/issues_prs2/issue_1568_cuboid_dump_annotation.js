@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -11,7 +11,7 @@ context('Dump annotation if cuboid created.', () => {
     const createCuboidShape2Points = {
         points: 'From rectangle',
         type: 'Shape',
-        labelName: labelName,
+        labelName,
         firstX: 250,
         firstY: 350,
         secondX: 350,
@@ -35,11 +35,12 @@ context('Dump annotation if cuboid created.', () => {
                 type: 'annotations',
                 format: exportFormat,
             };
-            cy.exportTask(exportAnnotation);
+            cy.exportJob(exportAnnotation);
+            cy.waitForDownload();
         });
 
         it('Error notification is not exists.', () => {
-            cy.get('.ant-notification-notice').should('not.exist');
+            cy.get('.ant-notification-notice-error').should('not.exist');
         });
     });
 });

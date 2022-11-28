@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -14,7 +14,7 @@ import Dropdown from 'antd/lib/dropdown';
 import Button from 'antd/lib/button';
 import { MoreOutlined } from '@ant-design/icons';
 
-import { CombinedState, Project } from 'reducers/interfaces';
+import { CombinedState, Project } from 'reducers';
 import { useCardHeightHOC } from 'utils/hooks';
 import ProjectActionsMenuComponent from './actions-menu';
 
@@ -24,7 +24,7 @@ interface Props {
 
 const useCardHeight = useCardHeightHOC({
     containerClassName: 'cvat-projects-page',
-    siblingClassNames: ['cvat-projects-pagination', 'cvat-projects-top-bar'],
+    siblingClassNames: ['cvat-projects-pagination', 'cvat-projects-page-top-bar'],
     paddings: 40,
     numberOfRows: 3,
 });

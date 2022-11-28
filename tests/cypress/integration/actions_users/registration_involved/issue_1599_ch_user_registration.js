@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
@@ -18,32 +18,30 @@ context('Issue 1599 (Chinese alphabet).', () => {
 
     after(() => {
         cy.logout(userName);
-        cy.deletingRegisteredUsers([userName]);
+        cy.getAuthKey().then((authKey) => {
+            cy.deleteUsers(authKey, [userName]);
+        });
     });
 
     describe('User registration using the Chinese alphabet.', () => {
         it('Filling in the placeholder "First name"', () => {
-            cy.get('[placeholder="First name"]').type(firstName).should('not.have.class', 'has-error');
+            cy.get('#firstName').type(firstName).should('not.have.class', 'has-error');
         });
 
         it('Filling in the placeholder "Last name"', () => {
-            cy.get('[placeholder="Last name"]').type(lastName).should('not.have.class', 'has-error');
+            cy.get('#lastName').type(lastName).should('not.have.class', 'has-error');
         });
 
         it('Filling in the placeholder "Username"', () => {
-            cy.get('[placeholder="Username"]').type(userName);
+            cy.get('#username').type(userName);
         });
 
         it('Filling in the placeholder "Email address"', () => {
-            cy.get('[placeholder="Email address"]').type(email);
+            cy.get('#email').type(email);
         });
 
         it('Filling in the placeholder "Password"', () => {
-            cy.get('[placeholder="Password"]').type(password);
-        });
-
-        it('Filling in the placeholder "Confirm password"', () => {
-            cy.get('[placeholder="Confirm password"]').type(password);
+            cy.get('#password1').type(password);
         });
 
         it('Click to "Submit" button', () => {

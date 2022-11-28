@@ -1,9 +1,9 @@
-// Copyright (C) 2020 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import { ActionUnion, createAction, ThunkAction } from 'utils/redux';
-import getCore from 'cvat-core-wrapper';
+import { getCore } from 'cvat-core-wrapper';
 
 const cvat = getCore();
 
@@ -15,10 +15,11 @@ export enum FormatsActionTypes {
 
 const formatsActions = {
     getFormats: () => createAction(FormatsActionTypes.GET_FORMATS),
-    getFormatsSuccess: (annotationFormats: any) =>
+    getFormatsSuccess: (annotationFormats: any) => (
         createAction(FormatsActionTypes.GET_FORMATS_SUCCESS, {
             annotationFormats,
-        }),
+        })
+    ),
     getFormatsFailed: (error: any) => createAction(FormatsActionTypes.GET_FORMATS_FAILED, { error }),
 };
 

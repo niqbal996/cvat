@@ -1,4 +1,5 @@
-// Copyright (C) 2020-2021 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corp
 //
 // SPDX-License-Identifier: MIT
 
@@ -6,12 +7,10 @@ import React from 'react';
 import { connect } from 'react-redux';
 import Title from 'antd/lib/typography/Title';
 import { Row, Col } from 'antd/lib/grid';
-import { Layout } from 'antd';
+import Layout from 'antd/lib/layout';
 
-import { CombinedState } from 'reducers/interfaces';
+import { CombinedState } from 'reducers';
 import { resetPasswordAsync } from 'actions/auth-actions';
-
-import FooterDrawer from 'components/login-page/intel-footer-drawer';
 import ResetPasswordConfirmForm, { ResetPasswordConfirmData } from './reset-password-confirm-form';
 
 interface StateToProps {
@@ -70,7 +69,6 @@ function ResetPasswordPagePageComponent(props: ResetPasswordConfirmPageComponent
                     </Col>
                 </Row>
             </Content>
-            <FooterDrawer />
         </Layout>
     );
 }

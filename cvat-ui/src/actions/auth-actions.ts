@@ -1,11 +1,13 @@
-// Copyright (C) 2020 Intel Corporation
+// Copyright (C) 2020-2022 Intel Corporation
+// Copyright (C) 2022 CVAT.ai Corporation
 //
 // SPDX-License-Identifier: MIT
 
 import { ActionUnion, createAction, ThunkAction } from 'utils/redux';
 import { UserConfirmation } from 'components/register-page/register-form';
-import getCore from 'cvat-core-wrapper';
+import { getCore } from 'cvat-core-wrapper';
 import isReachable from 'utils/url-checker';
+import { AdvancedAuthMethodsList } from '../reducers';
 
 const cvat = getCore();
 
@@ -34,6 +36,9 @@ export enum AuthActionTypes {
     LOAD_AUTH_ACTIONS = 'LOAD_AUTH_ACTIONS',
     LOAD_AUTH_ACTIONS_SUCCESS = 'LOAD_AUTH_ACTIONS_SUCCESS',
     LOAD_AUTH_ACTIONS_FAILED = 'LOAD_AUTH_ACTIONS_FAILED',
+    LOAD_ADVANCED_AUTHENTICATION = 'LOAD_ADVANCED_AUTHENTICATION',
+    LOAD_ADVANCED_AUTHENTICATION_SUCCESS = 'LOAD_ADVANCED_AUTHENTICATION_SUCCESS',
+    LOAD_ADVANCED_AUTHENTICATION_FAILED = 'LOAD_ADVANCED_AUTHENTICATION_FAILED',
 }
 
 export const authActions = {
@@ -41,7 +46,9 @@ export const authActions = {
     authorizeFailed: (error: any) => createAction(AuthActionTypes.AUTHORIZED_FAILED, { error }),
     login: () => createAction(AuthActionTypes.LOGIN),
     loginSuccess: (user: any) => createAction(AuthActionTypes.LOGIN_SUCCESS, { user }),
-    loginFailed: (error: any) => createAction(AuthActionTypes.LOGIN_FAILED, { error }),
+    loginFailed: (error: any, hasEmailVerificationBeenSent = false) => (
+        createAction(AuthActionTypes.LOGIN_FAILED, { error, hasEmailVerificationBeenSent })
+    ),
     register: () => createAction(AuthActionTypes.REGISTER),
     registerSuccess: (user: any) => createAction(AuthActionTypes.REGISTER_SUCCESS, { user }),
     registerFailed: (error: any) => createAction(AuthActionTypes.REGISTER_FAILED, { error }),
@@ -51,8 +58,9 @@ export const authActions = {
     changePassword: () => createAction(AuthActionTypes.CHANGE_PASSWORD),
     changePasswordSuccess: () => createAction(AuthActionTypes.CHANGE_PASSWORD_SUCCESS),
     changePasswordFailed: (error: any) => createAction(AuthActionTypes.CHANGE_PASSWORD_FAILED, { error }),
-    switchChangePasswordDialog: (showChangePasswordDialog: boolean) =>
-        createAction(AuthActionTypes.SWITCH_CHANGE_PASSWORD_DIALOG, { showChangePasswordDialog }),
+    switchChangePasswordDialog: (showChangePasswordDialog: boolean) => (
+        createAction(AuthActionTypes.SWITCH_CHANGE_PASSWORD_DIALOG, { showChangePasswordDialog })
+    ),
     requestPasswordReset: () => createAction(AuthActionTypes.REQUEST_PASSWORD_RESET),
     requestPasswordResetSuccess: () => createAction(AuthActionTypes.REQUEST_PASSWORD_RESET_SUCCESS),
     requestPasswordResetFailed: (error: any) => createAction(AuthActionTypes.REQUEST_PASSWORD_RESET_FAILED, { error }),
@@ -60,12 +68,20 @@ export const authActions = {
     resetPasswordSuccess: () => createAction(AuthActionTypes.RESET_PASSWORD_SUCCESS),
     resetPasswordFailed: (error: any) => createAction(AuthActionTypes.RESET_PASSWORD_FAILED, { error }),
     loadServerAuthActions: () => createAction(AuthActionTypes.LOAD_AUTH_ACTIONS),
-    loadServerAuthActionsSuccess: (allowChangePassword: boolean, allowResetPassword: boolean) =>
+    loadServerAuthActionsSuccess: (allowChangePassword: boolean, allowResetPassword: boolean) => (
         createAction(AuthActionTypes.LOAD_AUTH_ACTIONS_SUCCESS, {
             allowChangePassword,
             allowResetPassword,
-        }),
+        })
+    ),
     loadServerAuthActionsFailed: (error: any) => createAction(AuthActionTypes.LOAD_AUTH_ACTIONS_FAILED, { error }),
+    loadAdvancedAuth: () => createAction(AuthActionTypes.LOAD_ADVANCED_AUTHENTICATION),
+    loadAdvancedAuthSuccess: (list: AdvancedAuthMethodsList) => (
+        createAction(AuthActionTypes.LOAD_ADVANCED_AUTHENTICATION_SUCCESS, { list })
+    ),
+    loadAdvancedAuthFailed: (error: any) => (
+        createAction(AuthActionTypes.LOAD_ADVANCED_AUTHENTICATION_FAILED, { error })
+    ),
 };
 
 export type AuthActions = ActionUnion<typeof authActions>;
@@ -75,8 +91,7 @@ export const registerAsync = (
     firstName: string,
     lastName: string,
     email: string,
-    password1: string,
-    password2: string,
+    password: string,
     confirmations: UserConfirmation[],
 ): ThunkAction => async (dispatch) => {
     dispatch(authActions.register());
@@ -87,8 +102,7 @@ export const registerAsync = (
             firstName,
             lastName,
             email,
-            password1,
-            password2,
+            password,
             confirmations,
         );
 
@@ -98,16 +112,16 @@ export const registerAsync = (
     }
 };
 
-export const loginAsync = (username: string, password: string): ThunkAction => async (dispatch) => {
+export const loginAsync = (credential: string, password: string): ThunkAction => async (dispatch) => {
     dispatch(authActions.login());
 
     try {
-        await cvat.server.login(username, password);
+        await cvat.server.login(credential, password);
         const users = await cvat.users.get({ self: true });
-
         dispatch(authActions.loginSuccess(users[0]));
     } catch (error) {
-        dispatch(authActions.loginFailed(error));
+        const hasEmailVerificationBeenSent = error.message.includes('Unverified email');
+        dispatch(authActions.loginFailed(error, hasEmailVerificationBeenSent));
     }
 };
 
@@ -115,6 +129,7 @@ export const logoutAsync = (): ThunkAction => async (dispatch) => {
     dispatch(authActions.logout());
 
     try {
+        await cvat.organizations.deactivate();
         await cvat.server.logout();
         dispatch(authActions.logoutSuccess());
     } catch (error) {
@@ -192,5 +207,15 @@ export const loadAuthActionsAsync = (): ThunkAction => async (dispatch) => {
         dispatch(authActions.loadServerAuthActionsSuccess(allowChangePassword, allowResetPassword));
     } catch (error) {
         dispatch(authActions.loadServerAuthActionsFailed(error));
+    }
+};
+
+export const loadAdvancedAuthAsync = (): ThunkAction => async (dispatch): Promise<void> => {
+    dispatch(authActions.loadAdvancedAuth());
+    try {
+        const list: AdvancedAuthMethodsList = await cvat.server.advancedAuthentication();
+        dispatch(authActions.loadAdvancedAuthSuccess(list));
+    } catch (error) {
+        dispatch(authActions.loadAdvancedAuthFailed(error));
     }
 };
