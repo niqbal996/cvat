@@ -12,6 +12,8 @@
 !/ssh/README.md
 /Mask_RCNN/
 /letsencrypt-webroot/
+#  fcos model file
+serverless/pytorch/facebookresearch/fcos/nuclio/model_final.pth
 
 # Ignore temporary files
 # docker-compose.override.yml

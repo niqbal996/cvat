@@ -25,35 +25,14 @@ labels = {1 : "maize", 0 : "weed" }
 def init_context(context):
     context.logger.info("Init context...  0%")
 
-    #args = default_argument_parser().parse_args()
-    cfg_file = "detectron2/configs/COCO-Detection/fcos_R_50_FPN_1x_maize.py"
+    cfg_file = "/opt/nuclio/fcos/detectron2/configs/COCO-Detection/fcos_R_50_FPN_1x_maize.py"
     cfg = LazyConfig.load(cfg_file)
-    cfg.train.output_dir = "fcos-output/"
-    cfg.dataloader.test.num_workers = 2
     default_setup(cfg, None)
-
-    '''
-    if torch.cuda.is_available():
-        CONFIG_OPTS.extend(['MODEL.DEVICE', 'cuda'])
-    else:
-        CONFIG_OPTS.extend(['MODEL.DEVICE', 'cpu'])
-
-    cfg.merge_from_list(CONFIG_OPTS)
-    cfg.MODEL.RETINANET.SCORE_THRESH_TEST = CONFIDENCE_THRESHOLD
-    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = CONFIDENCE_THRESHOLD
-    cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = CONFIDENCE_THRESHOLD
-    cfg.freeze()
-    '''
-
     model = instantiate(cfg.model)
-    # model.to(cfg.train.device)
-    # model = create_ddp_model(model)
     DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
-
     model.eval()
 
     context.user_data.model_handler = model
-
     context.logger.info("Init context...100%")
 
 def handler(context, event):
